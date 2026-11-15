@@ -1,0 +1,11 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/shared/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Esquema inicial vazio; entidades de orçamento e cobrança entram nas etapas E15+.
