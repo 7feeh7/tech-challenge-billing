@@ -221,10 +221,28 @@ async function cenarioExpiracao(
     return;
   }
 
-  await aguardar(50_000);
-  const consulta = await cliente.consultarOrder(orderId);
-  const status = extrairStatus(consulta.corpoSanitizado);
-  const expirou = status === 'canceled' || status === 'expired';
+  const inicioEspera = Date.now();
+  const limiteMs = 300_000;
+  const intervaloMs = 15_000;
+  let consulta = await cliente.consultarOrder(orderId);
+  let status = extrairStatus(consulta.corpoSanitizado);
+  let statusDetail =
+    (consulta.corpoSanitizado as { status_detail?: string }).status_detail ??
+    '';
+  while (
+    status === 'created' &&
+    Date.now() - inicioEspera < limiteMs
+  ) {
+    await aguardar(intervaloMs);
+    consulta = await cliente.consultarOrder(orderId);
+    status = extrairStatus(consulta.corpoSanitizado);
+    statusDetail =
+      (consulta.corpoSanitizado as { status_detail?: string }).status_detail ??
+      '';
+  }
+  const expirou =
+    status === 'canceled' &&
+    (statusDetail === 'expired' || statusDetail.includes('expir'));
   registro.adicionar({
     id: 'C05',
     titulo: 'Expiração (expiration_time PT45S)',
@@ -234,17 +252,19 @@ async function cenarioExpiracao(
       expiration_time: 'PT45S',
     }),
     resposta: {
-      consulta_apos_50s: {
+      consulta_final: {
         status_http: consulta.status,
         status_order: status,
+        status_detail: statusDetail,
+        espera_total_ms: Date.now() - inicioEspera,
         corpo: consulta.corpoSanitizado,
       },
     },
     comportamento: expirou
-      ? 'Após o prazo, consulta indica order encerrada sem pagamento.'
-      : `Status após espera: ${status ?? 'desconhecido'}.`,
+      ? 'Order passa a canceled com status_detail expired após janela de expiração (pode ser assíncrono).'
+      : `Status após espera máx. ${limiteMs}ms: ${status ?? 'desconhecido'}.`,
     observacoes:
-      'Demonstração D4.6: prazo pagamento 3 min → validar PT3M em E17; aqui usamos PT45S por tempo de execução.',
+      'Demonstração D4.6: prazo pagamento 3 min → validar PT3M em E17; PT45S não encerra na marca dos 45s — polling necessário.',
   });
 }
 
