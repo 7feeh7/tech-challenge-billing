@@ -37,7 +37,12 @@
   },
   "overrides": [
     {
-      "includes": ["dist/**", "coverage/**", "src/shared/generated/**"],
+      "includes": [
+        "dist/**",
+        "coverage/**",
+        "prova-tecnica/**",
+        "src/shared/generated/**"
+      ],
       "formatter": { "enabled": false },
       "linter": { "enabled": false }
     }
