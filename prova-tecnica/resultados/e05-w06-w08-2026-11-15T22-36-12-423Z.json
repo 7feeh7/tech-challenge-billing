@@ -1,0 +1,107 @@
+{
+  "evidencias": [
+    {
+      "id": "W06",
+      "resultado": "comprovado",
+      "observacoes": "Use MP_ORDER_W06_ID após FUND+APRO no mesmo checkout; script só valida GET final.",
+      "dados": {
+        "get": {
+          "id": "ORDTST01M7GMMTFB6C17A37RM207XAST",
+          "type": "online",
+          "processing_mode": "manual",
+          "external_reference": "e05-w06-306879b4-7d3f-4ffc-921c-d71b849f3433",
+          "total_amount": "212.00",
+          "total_paid_amount": "212.00",
+          "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GMMTFB6C17A37RM207XAST&pref_id=3844602487-006df59d-54e6-46f5-b360-9d3ec2bbff1d",
+          "expiration_time": "PT30M",
+          "country_code": "BRA",
+          "user_id": "3844602487",
+          "status": "processed",
+          "status_detail": "accredited",
+          "capture_mode": "automatic_async",
+          "client_token": "[redacted]",
+          "currency": "BRL",
+          "created_date": "2026-11-15T22:18:32.827Z",
+          "last_updated_date": "2026-11-15T22:28:46.556Z",
+          "integration_data": {
+            "application_id": "6090007074819587"
+          },
+          "config": {
+            "online": {
+              "retries": {
+                "allowed": true,
+                "max_attempts": 20
+              }
+            }
+          },
+          "transactions": {
+            "payments": [
+              {
+                "id": "PAY01M7GN4JNQ27FGP9YTXRP9TCG6",
+                "amount": "212",
+                "taxes_amount": "0",
+                "reference_id": "188777659157",
+                "status": "failed",
+                "status_detail": "insufficient_amount",
+                "attempt_number": 1,
+                "payment_method": {
+                  "id": "master",
+                  "issuer_id": "12749",
+                  "type": "credit_card",
+                  "installments": 1,
+                  "installment_amount": "212"
+                }
+              },
+              {
+                "id": "PAY01M7GN7HTVMPN47J1BW52QB7B7",
+                "amount": "212",
+                "paid_amount": "212",
+                "taxes_amount": "0",
+                "reference_id": "188777785631",
+                "status": "processed",
+                "status_detail": "accredited",
+                "attempt_number": 2,
+                "payment_method": {
+                  "id": "master",
+                  "issuer_id": "12749",
+                  "type": "credit_card",
+                  "installments": 1,
+                  "installment_amount": "212"
+                }
+              }
+            ]
+          },
+          "items": [
+            {
+              "title": "Prova técnica E04 — cobrança oficina",
+              "unit_price": "212.00",
+              "quantity": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "W07",
+      "resultado": "comprovado",
+      "observacoes": "Política D3.15: após 409, mesma X-Idempotency-Key deve ecoar resultado sem novo estorno (comparar HTTP/corpo).",
+      "dados": {
+        "primeira_total": {
+          "status_http": 409
+        },
+        "mesma_chave_reenvio": {
+          "status_http": 201,
+          "mesmo_status_que_primeira": false
+        }
+      }
+    },
+    {
+      "id": "W08",
+      "resultado": "indisponível",
+      "observacoes": "Expiração comprovada por GET; webhook orders_v2 não registrado em webhook-entregas.jsonl.",
+      "dados": {
+        "webhooks_novos": []
+      }
+    }
+  ]
+}

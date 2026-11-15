@@ -9,7 +9,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { HttpAdapterHost } from '@nestjs/core';
+import { HttpAdapterHost } from '@nestjs/core';
 import {
   DomainConflictError,
   DomainError,

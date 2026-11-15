@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { HealthModule } from './modules/health/health.module';
+import { WebhookMercadoPagoModule } from './modules/webhook-mercado-pago/webhook-mercado-pago.module';
 import { PrismaModule } from './shared/database/prisma.module';
 import { DomainExceptionFilter } from './shared/filters/domain-exception.filter';
 import { ObservabilityModule } from './shared/observability/observability.module';
@@ -11,10 +12,11 @@ import { ObservabilityModule } from './shared/observability/observability.module
     ObservabilityModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env', 'prova-tecnica/.env'],
     }),
     PrismaModule,
     HealthModule,
+    WebhookMercadoPagoModule,
   ],
   providers: [
     {

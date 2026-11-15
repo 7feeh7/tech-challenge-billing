@@ -375,9 +375,9 @@ Ambiente **teste**; sem webhook (escopo E05).
 ```
 </details>
 ### C06 — Pagamento aprovado (cartão de teste APRO)
-- **Resultado:** pendente *(hipótese/documentação; não comprovado em runtime)*
+- **Resultado:** comprovado *(2ª passada; ver tabela e order `ORDTST01M7GH2KEG5AH9PXBNF8S3AQ8A`)*
 - **Decisões:** D3.2, D3.11, D4.5
-- **Comportamento:** Aguarda conclusão manual no checkout (documentação MP).
+- **Comportamento:** Checkout com titular APRO; GET confirma `processed` / pagamento `accredited`.
 <details>
 <summary>Requisição/resposta sanitizadas</summary>
 ```json
@@ -420,9 +420,9 @@ Ambiente **teste**; sem webhook (escopo E05).
 ```
 </details>
 ### C07 — Pagamento recusado (cartão de teste FUND)
-- **Resultado:** pendente *(hipótese/documentação; não comprovado em runtime)*
+- **Resultado:** comprovado *(ver § C07 — `action_required` / `waiting_retry`)*
 - **Decisões:** D1.15, D3.11, billing.md — recusa
-- **Comportamento:** Requer pagamento no checkout com titular FUND; opcional MP_ORDER_RECUSADA_ID.
+- **Comportamento:** Order permanece com `checkout_url`; pagamento `failed` / `insufficient_amount`.
 <details>
 <summary>Requisição/resposta sanitizadas</summary>
 ```json
@@ -465,9 +465,9 @@ Ambiente **teste**; sem webhook (escopo E05).
 ```
 </details>
 ### C08 — Tentar cancelar order já paga
-- **Resultado:** pendente *(hipótese/documentação; não comprovado em runtime)*
-- **Decisões:** D4.5, billing.md — só created/action_required
-- **Comportamento:** Depende de order paga (C06). Documentação: cancel só em created/action_required.
+- **Resultado:** comprovado *(HTTP 409 `cannot_cancel_order`)*
+- **Decisões:** D4.5, billing.md
+- **Comportamento:** `POST /cancel` em order `processed` retorna 409; cancelamento não presume estorno.
 <details>
 <summary>Requisição/resposta sanitizadas</summary>
 ```json
@@ -475,9 +475,9 @@ Ambiente **teste**; sem webhook (escopo E05).
 ```
 </details>
 ### C09 — Estorno total
-- **Resultado:** pendente *(hipótese/documentação; não comprovado em runtime)*
-- **Decisões:** D1.20, D3.11
-- **Comportamento:** Requer order paga (variável MP_ORDER_PAGA_ID).
+- **Resultado:** comprovado *(ver § C09 — 409 genérico e 2ª tentativa com nova chave)*
+- **Decisões:** D1.20, D3.11, D3.15
+- **Comportamento:** Estorno total após parcial; retry com nova `X-Idempotency-Key`.
 <details>
 <summary>Requisição/resposta sanitizadas</summary>
 ```json
@@ -485,9 +485,9 @@ Ambiente **teste**; sem webhook (escopo E05).
 ```
 </details>
 ### C10 — Estorno parcial
-- **Resultado:** pendente *(hipótese/documentação; não comprovado em runtime)*
+- **Resultado:** comprovado *(R$ 50 → `partially_refunded`)*
 - **Decisões:** D1.20, D2.17
-- **Comportamento:** Requer segunda order paga (MP_ORDER_PARCIAL_ID) sem estorno total prévio.
+- **Comportamento:** `POST /refund` com valor parcial antes do total.
 <details>
 <summary>Requisição/resposta sanitizadas</summary>
 ```json
@@ -504,11 +504,8 @@ Ambiente **teste**; sem webhook (escopo E05).
 | **D1.15** | C07 retentável (`waiting_retry`) | Nova order/chave conforme `billing.md` |
 | **D1.20** | C09/C10 sequência parcial→total | Retry + GET para conciliar |
 | **D4.5 / D4.6** | C05/C05b | Polling expiração; PT3M aceito |
-| **Contratos `billing.*`** | Provisórios (D9.7) | E05: status reais, estorno, recusa |
+| **Contratos `billing.*`** | Status reais na API (E04) | Fechados na E05 (`docs/contratos/exemplos/`, `RELATORIO-E05.md`) |
 
-## Pendências para E05
+## Pendências encerradas na E05
 
-- Webhook `orders_v2`, validação `x-signature` e reenvios em teste.
-- Confirmar se notificação de expiração existe ou só conciliação por GET.
-- Fechar contratos financeiros com enums de `status`/`status_detail` observados (incl. `action_required`, `partially_refunded`).
-- Registrar política de retry para `409 Conflict` em refund (corpo genérico) após estorno parcial.
+- Webhook, contratos e política de idempotência pós-409: ver `prova-tecnica/RELATORIO-E05.md`.
