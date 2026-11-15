@@ -14,7 +14,11 @@
     "test:cov": "jest --coverage",
     "test:int": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-int.json --runInBand",
     "test:e2e": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --runInBand",
-    "prova-tecnica": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/executar.ts"
+    "prova-tecnica": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/executar.ts",
+    "prova-tecnica-e05": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/executar-e05.ts",
+    "prova-tecnica-w06-w08": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/executar-w06-w08.ts",
+    "prova-proxy-webhook": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/proxy-somente-webhook.ts",
+    "prova-servidor-webhook-e05": "ts-node --project prova-tecnica/tsconfig.json prova-tecnica/servidor-webhook-e05.ts"
   },
   "dependencies": {
     "@fastify/static": "^9.1.3",
