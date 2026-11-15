@@ -8,15 +8,21 @@ Contratos financeiros fechados na E05 conforme evidências da prova técnica (Or
 
 ### Regras observadas na E05 (não alteram decisões arquiteturais)
 
-- **Fonte de verdade financeira:** `GET /v1/orders/{id}` após gatilho (webhook ou job). O Billing **deve** conciliar antes de publicar eventos financeiros definitivos.
-- **Webhook:** notificação `orders_v2` com HMAC comprovada (W01); entregas **incompletas** no ambiente teste (muitas transições só apareceram no GET). Usar webhook como **gatilho**, não como estado final.
-- **`order.processed`:** pode chegar com order ainda `action_required`/`waiting_retry` após recusa (W06); não inferir pagamento só pelo `action`.
-- **Expiração:** exemplo `billing.cobranca-expirada.v1` com `canceled`/`expired` comprovado por GET (W08); webhook de expiração **não** registrado no jsonl da prova.
-- **Estorno:** exemplos com `refunded`/`refunded` (W07). Após estorno parcial, estorno total pode retornar **409**; reutilizar a mesma `X-Idempotency-Key` **não** garantiu repetir o mesmo HTTP (409 depois 201 na prova) — **sempre** confirmar efeito pelo GET antes de nova chave ou nova operação.
-- **Deduplicação de webhook (`x-request-id`):** dedup em memória na prova e cobertura por testes/script; **não** comprovado reenvio com mesmo id no painel (histórico vazio). Não tratar `x-request-id` como identificador estável de reenvio até validação explícita.
-- **Situação indeterminada:** usar `billing.situacao-financeira.v1` com `INDETERMINADA` quando webhook e GET divergirem ou faltar entrega.
+- **Situação financeira:** a consulta à **Orders API** (`GET /v1/orders/{id}`) é a **autoridade**. O Billing concilia antes de publicar eventos financeiros definitivos.
+- **Webhook:** gatilho de conciliação; HMAC comprovada (W01). Entregas incompletas no teste **não** mudam a regra acima.
+- **`order.processed`:** pode ocorrer com order ainda `action_required`/`waiting_retry` (W06); decisão financeira vem do GET, não do `action`.
+- **INDETERMINADA** (`billing.situacao-financeira.v1`): quando o **GET** não permite confirmar situação ou efeito financeiro (erro, timeout, resposta ambígua, order ausente). Divergência ou **ausência** de webhook, **isoladamente**, **não** caracteriza indeterminada — nestes casos, orientar conciliação por GET/job.
+- **Expiração:** `billing.cobranca-expirada.v1` com `canceled`/`expired` observado por GET (W08); webhook de expiração não comprovado no jsonl da prova.
+- **Estorno (complemento D3.15):**
+  - Interpretar o **código/mensagem específica** do erro (ex.: conflitos de refund).
+  - Nas retentativas da **mesma** operação, **preservar** a mesma `X-Idempotency-Key`.
+  - **Nova** chave somente com evidência conclusiva de que a operação anterior **não** teve efeito, **não** está em processamento e a API **permite** nova tentativa.
+  - `refunded_amount` (ou campos equivalentes) **inalterado**, isoladamente, **não** é evidência suficiente.
+  - Resultado **indeterminado** após retentativas: abrir **pendência** e **alerta**; **sem** nova operação automática.
+  - Na prova W07, a mesma chave após **409** retornou **201** — a API **não** garante repetir o mesmo HTTP; o efeito comprova-se pelo GET (`refunded`).
+- **Deduplicação webhook (`x-request-id`):** cobertura em testes/script; reenvio com mesmo id **não** comprovado no painel (histórico vazio). Não assumir `x-request-id` estável entre reenvios sem prova.
 
-Status MP nos exemplos: valores **observados** na E04/E05 (`processed`, `action_required`, `waiting_retry`, `canceled`, `expired`, `refunded`); recusa materializada no pagamento `failed`/`insufficient_amount`, não como `failed` na order.
+Status MP nos exemplos: valores **observados** na E04/E05 (`processed`, `action_required`, `waiting_retry`, `canceled`, `expired`, `refunded`); recusa no pagamento `failed`/`insufficient_amount`, não como `failed` na order.
 
 ---
 

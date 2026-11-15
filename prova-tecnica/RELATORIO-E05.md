@@ -4,14 +4,13 @@ Ambiente **teste**; endpoint local `POST /v1/webhooks/mercado-pago`; tópico pai
 
 ## Resumo (atualizado — sessão túnel 2026-11-15)
 
-| Classe | Cenários |
-| --- | --- |
-| **Comprovado (runtime)** | W01, W05, **W06**, **W08** (GET `canceled`/`expired`) |
-| **Comprovado (Jest/script local)** | W02, W04, W03 (só `yarn prova-tecnica-e05`, não painel) |
-| **Limitado** | **W03** (histórico painel vazio); **W07** (409 reproduzido, reenvio mesma chave não ecoa HTTP); **webhooks** (lacunas vs GET — ver § Confronto) |
-| **Pendente** | Nenhum cenário W01–W08 bloqueado para fechamento da E05 (lacunas documentadas) |
+| Classe | Qtd | Cenários |
+| --- | --- | --- |
+| **Comprovado** | **5** | W01, W02, W04, W05, W06 |
+| **Limitado** | **3** | W03, W07, W08 |
+| **Impedimento técnico** | **0** | — |
 
-**Decisão D3.15:** mantida — Orders API como conciliação obrigatória; webhook e idempotência HTTP **sem** garantias observadas na prova (ver `docs/contratos/mensagens-billing.md`).
+**Decisão D3.15:** mantida — Orders API como autoridade financeira; política de estorno e INDETERMINADA em `docs/contratos/mensagens-billing.md`.
 
 ### Infra local (encerrada — fim E05)
 
@@ -20,9 +19,9 @@ Ambiente **teste**; endpoint local `POST /v1/webhooks/mercado-pago`; tópico pai
 | cloudflared | **Encerrado** (túnel quick inativo) |
 | Proxy (:8787) | **Encerrado** |
 | Billing (`:3000`) | **Encerrado** |
-| URL pública antiga | `detector-shopzilla-clinical-commonwealth.trycloudflare.com` — **inacessível** (curl falha após parada) |
-
-**Autor:** remover URL do webhook no [painel Developers](https://www.mercadopago.com.br/developers/panel/app) se ainda cadastrada.
+| Túnel durante a prova | quick cloudflared → proxy `:8787` → `detector-shopzilla-clinical-commonwealth.trycloudflare.com` |
+| Encerramento local | cloudflared/proxy/Billing parados; URL pública **inacessível** após parada (verificado por curl) |
+| URL no painel MP | **Não confirmado** nesta sessão se o autor removeu a URL cadastrada — ação manual pendente de confirmação pelo autor |
 
 ## Cenários webhook (W01–W08)
 
@@ -36,7 +35,7 @@ Ambiente **teste**; endpoint local `POST /v1/webhooks/mercado-pago`; tópico pai
 | W05 | Conciliação GET order após webhook | **comprovado (runtime)** | Handler GET sempre; ver **lição W06** abaixo |
 | W06 | FUND depois APRO na mesma order | **comprovado (runtime)** | Order única `ORDTST01M7GMMTFB6C17A37RM207XAST`; mesmo `checkout_url`; GET: tentativa 1 `failed`/`insufficient_amount`, tentativa 2 `processed`/`accredited`; script `e05-w06-w08-2026-11-15T22-27-59-829Z.json` |
 | W07 | Estorno parcial + total; 409 + mesma chave | **limitado** | Order `ORDTST01M7GN83QJJAV9NGEC9GFKJAXB`: pagamento comprovado; GET final `refunded`/`refunded`, 2 refunds; parcial R$ 50 + total; 1ª total **409**; reenvio **mesma** chave **201** (≠ eco 409); sem nova chave forçada; `e05-w06-w08-2026-11-15T22-36-12-423Z.json` |
-| W08 | Expiração sem pagamento | **comprovado** (GET) / **limitado** (webhook) | Order `ORDTST01M7GNBWWHQWBXS25MMP4GT6K3` `PT3M`; após ~5,5 min GET `canceled`/`expired` (poll pós-script); **nenhum** webhook no jsonl |
+| W08 | Expiração sem pagamento | **limitado** | GET `canceled`/`expired` comprovado (`ORDTST01M7GNBWWHQWBXS25MMP4GT6K3`); **nenhum** webhook no jsonl |
 
 ### Lição W06 — `order.processed` × situação financeira
 
@@ -72,7 +71,7 @@ Conclusão E05: manter **GET conciliação** no handler (W05) e não fechar fina
 | `billing.pagamento-tardio-registrado.v1` | Exemplo com `ESTORNO_AUTOMATICO` (fluxo E17) |
 | `billing.estorno-concluido.v1` | `statusOrderMercadoPago: refunded` |
 | `billing.consultar-situacao-financeira.v1` | `finalidade` do spec |
-| `billing.situacao-financeira.v1` | Dois exemplos: `PAGO_NO_PRAZO` e `INDETERMINADA` |
+| `billing.situacao-financeira.v1` | Sucesso e `INDETERMINADA` — indeterminada só quando o GET não confirma efeito (não por falta de webhook isolada) |
 
 Status Mercado Pago nos contratos e na implementação usam valores **observados** na E04/E05 (`processed`, `action_required`, `waiting_retry`, `partially_refunded`, `refunded`) — **não** `failed` na order para recusa.
 
@@ -83,7 +82,7 @@ Status Mercado Pago nos contratos e na implementação usam valores **observados
 | Webhook `orders_v2` (APRO, estorno, expiração) | Várias transições **sem** linha em `webhook-entregas.jsonl` (túnel ativo) | GET order + job conciliação (E04 C05, D4.5); W08 expirou só no GET |
 | Histórico de entregas no painel Webhooks | Lista vazia; simulação e checkout reportam sucesso no destino | W03 sem reenvio manual; **não** equivaler nova notificação (outro `x-request-id`) a deduplicação; script `prova-tecnica-e05` para W03 |
 
-## Comandos locais (aceite — reexecutados ao encerrar E05)
+## Comandos locais (aceite)
 
 | Comando | Resultado |
 | --- | --- |
@@ -130,35 +129,29 @@ Use a URL `https://*.trycloudflare.com` **somente** no webhook. Ao terminar: par
 yarn prova-tecnica-e05
 ```
 
-## Impedimentos nesta sessão
+## Saída — E05 (aprovada pelo Elephant, com limitações documentadas)
 
-| ID | Descrição |
+| Métrica | Valor |
 | --- | --- |
-| — | Lacunas: W03 painel; entrega webhook incompleta pós-FUND; W07 idempotência HTTP |
+| Cenários **comprovados** | **5** — W01, W02, W04, W05, W06 |
+| Cenários **limitados** | **3** — W03, W07, W08 |
+| **Impedimento técnico restante** | **Nenhum** |
+| Túnel na prova | Utilizado (`trycloudflare.com` → proxy → Billing); encerrado localmente |
+| URL pública pós-encerramento | Inacessível (comprovado) |
+| Remoção da URL no painel MP | **Não comprovada** — responsabilidade do autor confirmar no Developers |
 
-## Saída — E05 (evidências até 2026-11-15, fim de sessão W07/W08)
+**Comprovado (síntese):** webhook `orders_v2` + HMAC; rejeição de assinatura inválida; reenvio após falha simulada; conciliação GET no handler; FUND→APRO na mesma order. Contratos `billing.*` v1 e exemplos alinhados à Orders API.
 
-### Comprovado
+**Limitado (síntese):** W03 dedup sem histórico no painel; W07 estorno com **409** e mesma chave (efeito pelo GET, sem garantia de eco HTTP); W08 expiração comprovada no GET sem webhook registrado. Lacunas de entrega webhook documentadas em § Confronto — **não** implicam INDETERMINADA isoladamente.
 
-- Endpoint webhook + HMAC (W01 runtime) e GET pós-notificação (W05/W06)
-- W06 FUND→APRO mesma order/checkout (`ORDTST01M7GMMTFB6C17A37RM207XAST`)
-- W07 fluxo financeiro: APRO em `ORDTST01M7GN83QJJAV9NGEC9GFKJAXB`, parcial + total, GET `refunded`
-- W08 expiração por GET (`ORDTST01M7GNBWWHQWBXS25MMP4GT6K3` → `canceled`/`expired`)
-- Contratos `billing.*` v1, Terraform SM contêiner, aceite `lint/build/test/e2e/terraform`
-
-### Limitado
-
-- **W03:** histórico painel vazio; dedup só testes/script local
-- **W07 D3.15:** 409 na 1ª estorno total após parcial **sim**; reenvio com **mesma** chave retornou **201** (não repete 409); estado final único `refunded` — implementação deve continuar consultando GET antes de nova chave
-- **Webhooks:** jsonl com 2 entradas apenas; W06 APRO tardio **não** chegou; estornos e expiração **sem** webhook registrado
-
-### Pendente
-
-- Nenhum item impeditivo para encerrar E05 no escopo da prova (limitações acima na Saída e em D3.11)
+**Encerramento:** `MP_WEBHOOK_SECRET` configurado durante a prova (sem bloqueio). Infra de prova local desligada; componentes em `src/` da prova permanecem até E17.
 
 ## Saídas para E17–E19
 
-- Contratos financeiros v1 em `docs/contratos/`
-- Endpoint mínimo webhook em `src/modules/webhook-mercado-pago/`
-- Contêiner SM `terraform/mercado-pago-secret.tf` (`mercado_pago_secret_arn`)
-- Política estorno: após 409, tentar **mesma** chave e validar GET; nova chave só se GET mostrar efeito ausente (W07 limitado: 409 depois 201 mesma chave); ver E04 C09
+- Contratos financeiros v1 em `docs/contratos/` (incl. regras E05 em `mensagens-billing.md`)
+- Endpoint webhook em `src/modules/webhook-mercado-pago/` (mantido até limpeza E17)
+- Contêiner SM `terraform/mercado_pago_secret_arn`
+- **Conciliação obrigatória:** `GET /v1/orders/{id}` como autoridade; webhook apenas gatilho
+- **INDETERMINADA:** somente quando o GET não confirma situação ou efeito; ausência/divergência de webhook isolada não basta
+- **Estorno (D3.15):** interpretar erro específico; mesma chave na retentativa da mesma operação; nova chave só com evidência conclusiva no GET (efeito ausente, sem processamento, API permite); `refunded_amount` inalterado isolado não basta; indeterminação → pendência/alerta, sem operação automática nova
+- Dedup webhook: não presumir `x-request-id` estável entre reenvios sem comprovação (W03 limitado)
