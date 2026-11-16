@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Prisma } from '@/shared/generated/prisma/client';
 import { EVENTO_ORCAMENTO_GERADO } from '@/shared/messaging/envelope';
 import { hashEnvelope } from '@/shared/messaging/hash-envelope';
 import { ProcessarGerarOrcamentoUseCase } from './processar-gerar-orcamento.use-case';
@@ -86,6 +87,24 @@ describe('ProcessarGerarOrcamentoUseCase', () => {
     await useCase.processar(exemplo);
 
     expect(gateway.criar).not.toHaveBeenCalled();
+    expect(mensagens.registrar).toHaveBeenCalled();
+  });
+
+  it('corrida concorrente: violação de unicidade não duplica outbox', async () => {
+    mensagens.jaProcessada.mockResolvedValue(false);
+    gateway.buscarPorOrdemServicoERodada
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(criarOrcamentoFake());
+    gateway.criar.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique', {
+        code: 'P2002',
+        clientVersion: '0',
+      }),
+    );
+
+    await useCase.processar(exemplo);
+
+    expect(outbox.registrar).not.toHaveBeenCalled();
     expect(mensagens.registrar).toHaveBeenCalled();
   });
 });

@@ -52,17 +52,6 @@ export class ValidarAssinaturaWebhookService {
     return { valida: true };
   }
 
-  gerarAssinaturaParaProva(
-    dataId: string,
-    requestId: string,
-    segredo: string,
-    ts = Math.floor(Date.now() / 1000),
-  ): string {
-    const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
-    const hash = createHmac('sha256', segredo).update(manifest).digest('hex');
-    return `ts=${ts},v1=${hash}`;
-  }
-
   private extrairPartesAssinatura(
     cabecalho: string,
   ): { ts: number; v1: string } | null {

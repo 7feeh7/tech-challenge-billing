@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { OwnershipGuard } from './modules/auth/guards/ownership.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
+import { CobrancasModule } from './modules/cobrancas/cobrancas.module';
 import { HealthModule } from './modules/health/health.module';
 import { OrcamentosModule } from './modules/orcamentos/orcamentos.module';
 import { WebhookMercadoPagoModule } from './modules/webhook-mercado-pago/webhook-mercado-pago.module';
@@ -17,11 +18,12 @@ import { ObservabilityModule } from './shared/observability/observability.module
     ObservabilityModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', 'prova-tecnica/.env'],
+      envFilePath: ['.env'],
     }),
     PrismaModule,
     AuthModule,
     HealthModule,
+    CobrancasModule,
     WebhookMercadoPagoModule,
     OrcamentosModule,
   ],

@@ -12,10 +12,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '@/modules/auth/decorators/public.decorator';
-import { ConsultarOrderMercadoPagoService } from './consultar-order-mercado-pago.service';
+import { ProcessarNotificacaoMercadoPagoUseCase } from '@/modules/cobrancas/application/use-cases/processar-notificacao-mercado-pago.use-case';
 import { AssinaturaWebhookInvalidaError } from './errors/assinatura-webhook-invalida.error';
-import { RegistroEntregaWebhookProvaService } from './registro-entrega-webhook-prova.service';
-import { RegistroNotificacaoWebhookService } from './registro-notificacao-webhook.service';
 import { ValidarAssinaturaWebhookService } from './validar-assinatura-webhook.service';
 
 @ApiTags('Webhooks')
@@ -24,9 +22,7 @@ import { ValidarAssinaturaWebhookService } from './validar-assinatura-webhook.se
 export class WebhookMercadoPagoController {
   constructor(
     private readonly validarAssinatura: ValidarAssinaturaWebhookService,
-    private readonly registro: RegistroNotificacaoWebhookService,
-    private readonly consultarOrder: ConsultarOrderMercadoPagoService,
-    private readonly registroArquivo: RegistroEntregaWebhookProvaService,
+    private readonly processarNotificacao: ProcessarNotificacaoMercadoPagoUseCase,
     private readonly config: ConfigService,
   ) {}
 
@@ -40,7 +36,7 @@ export class WebhookMercadoPagoController {
     }),
   )
   @ApiOperation({
-    summary: 'Recebe notificações orders_v2 do Mercado Pago (prova E05)',
+    summary: 'Recebe notificações orders_v2 do Mercado Pago',
   })
   async receber(
     @Body() corpo: Record<string, unknown>,
@@ -48,7 +44,6 @@ export class WebhookMercadoPagoController {
     @Query('type') tipoQuery: string | undefined,
     @Headers('x-signature') assinatura: string | undefined,
     @Headers('x-request-id') requestId: string | undefined,
-    @Query('prova_simular_falha') provaSimularFalha: string | undefined,
   ) {
     const segredo = this.config.get<string>('MP_WEBHOOK_SECRET')?.trim();
     if (!segredo) {
@@ -81,56 +76,28 @@ export class WebhookMercadoPagoController {
       throw new AssinaturaWebhookInvalidaError();
     }
 
-    if (
-      provaSimularFalha === '1' &&
-      this.config.get<string>('MP_WEBHOOK_PROVA_HABILITADA') === 'true'
-    ) {
-      throw new ServiceUnavailableException(
-        'Falha simulada para teste de reenvio (E05).',
-      );
-    }
-
-    const registro = this.registro.registrar(
-      { requestId: requestId ?? orderId, orderId },
-      {
-        recebidaEm: new Date().toISOString(),
-        requestId: requestId ?? orderId,
-        notificacaoId:
-          corpo.id !== undefined
-            ? String(corpo.id as string | number)
-            : undefined,
-        orderId,
-        tipo:
-          tipoQuery ??
-          (typeof corpo.type === 'string' ? corpo.type : undefined),
-        acao: typeof corpo.action === 'string' ? corpo.action : undefined,
-      },
-    );
-
-    this.registroArquivo.registrar({
-      recebidaEm: registro.recebidaEm,
-      orderId,
-      requestId: registro.requestId,
-      notificacaoId: registro.notificacaoId,
-      tipo: registro.tipo,
-      acao: registro.acao,
-      duplicado: registro.duplicada,
+    const resultado = await this.processarNotificacao.execute({
+      mercadoPagoOrderId: orderId,
+      requestId: requestId ?? undefined,
+      notificacaoId:
+        corpo.id !== undefined
+          ? String(corpo.id as string | number)
+          : undefined,
+      tipo:
+        tipoQuery ?? (typeof corpo.type === 'string' ? corpo.type : undefined),
+      acao: typeof corpo.action === 'string' ? corpo.action : undefined,
     });
-
-    const consulta = await this.consultarOrder.consultar(orderId);
 
     return {
       recebido: true,
-      duplicado: registro.duplicada,
-      requestId: registro.requestId,
       orderId,
-      tipo: registro.tipo,
-      acao: registro.acao,
-      situacaoFinanceira: {
-        statusOrder: consulta.status,
-        statusDetail: consulta.statusDetail,
-        indisponivel: consulta.indisponivel,
-      },
+      requestId: requestId ?? orderId,
+      tipo:
+        tipoQuery ?? (typeof corpo.type === 'string' ? corpo.type : undefined),
+      acao: typeof corpo.action === 'string' ? corpo.action : undefined,
+      cobrancaId: resultado.cobrancaId,
+      situacaoCobranca: resultado.situacao,
+      efeitoAplicado: resultado.efeitoAplicado,
     };
   }
 }

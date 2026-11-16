@@ -14,6 +14,9 @@ export class PrismaCobrancaMapper {
       valorTotalCentavos: raw.valorTotalCentavos,
       prazoPagamento: raw.prazoPagamento,
       situacao: raw.situacao as SituacaoCobranca,
+      linkPagamento: raw.linkPagamento,
+      pagamentoConfirmadoEm: raw.pagamentoConfirmadoEm,
+      bloqueadoConciliacaoAte: raw.bloqueadoConciliacaoAte,
       criadoEm: raw.criadoEm,
     });
   }
@@ -28,6 +31,18 @@ export class PrismaCobrancaMapper {
       valorTotalCentavos: cobranca.valorTotalCentavos,
       prazoPagamento: cobranca.prazoPagamento,
       situacao: cobranca.situacao,
+      linkPagamento: cobranca.linkPagamento,
+      pagamentoConfirmadoEm: cobranca.pagamentoConfirmadoEm,
+      bloqueadoConciliacaoAte: cobranca.bloqueadoConciliacaoAte,
+    };
+  }
+
+  static toUpdate(cobranca: Cobranca) {
+    return {
+      situacao: cobranca.situacao,
+      linkPagamento: cobranca.linkPagamento,
+      pagamentoConfirmadoEm: cobranca.pagamentoConfirmadoEm,
+      bloqueadoConciliacaoAte: cobranca.bloqueadoConciliacaoAte,
     };
   }
 }

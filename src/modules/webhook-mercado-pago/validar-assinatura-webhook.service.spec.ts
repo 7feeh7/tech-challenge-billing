@@ -1,3 +1,4 @@
+import { gerarAssinaturaWebhook } from '@/shared/testing/gerar-assinatura-webhook';
 import { ValidarAssinaturaWebhookService } from './validar-assinatura-webhook.service';
 
 describe('ValidarAssinaturaWebhookService', () => {
@@ -7,11 +8,7 @@ describe('ValidarAssinaturaWebhookService', () => {
   const requestId = '550e8400-e29b-41d4-a716-446655440099';
 
   it('aceita assinatura válida gerada com o mesmo segredo', () => {
-    const assinatura = servico.gerarAssinaturaParaProva(
-      dataId,
-      requestId,
-      segredo,
-    );
+    const assinatura = gerarAssinaturaWebhook(dataId, requestId, segredo);
 
     const resultado = servico.validar({
       dataId,
@@ -36,11 +33,7 @@ describe('ValidarAssinaturaWebhookService', () => {
   });
 
   it('rejeita assinatura com hash incorreto', () => {
-    const assinatura = servico.gerarAssinaturaParaProva(
-      dataId,
-      requestId,
-      segredo,
-    );
+    const assinatura = gerarAssinaturaWebhook(dataId, requestId, segredo);
     const adulterada = assinatura.replace(/v1=[a-f0-9]+/, 'v1=0'.repeat(16));
 
     const resultado = servico.validar({
@@ -56,7 +49,7 @@ describe('ValidarAssinaturaWebhookService', () => {
 
   it('rejeita timestamp fora da tolerância', () => {
     const tsAntigo = Math.floor(Date.now() / 1000) - 10_000;
-    const assinatura = servico.gerarAssinaturaParaProva(
+    const assinatura = gerarAssinaturaWebhook(
       dataId,
       requestId,
       segredo,
@@ -75,11 +68,7 @@ describe('ValidarAssinaturaWebhookService', () => {
   });
 
   it('rejeita quando x-request-id está ausente', () => {
-    const assinatura = servico.gerarAssinaturaParaProva(
-      dataId,
-      requestId,
-      segredo,
-    );
+    const assinatura = gerarAssinaturaWebhook(dataId, requestId, segredo);
 
     const resultado = servico.validar({
       dataId,

@@ -1,18 +1,12 @@
 import { Module } from '@nestjs/common';
-import { ConsultarOrderMercadoPagoService } from './consultar-order-mercado-pago.service';
-import { RegistroEntregaWebhookProvaService } from './registro-entrega-webhook-prova.service';
-import { RegistroNotificacaoWebhookService } from './registro-notificacao-webhook.service';
+import { CobrancasModule } from '@/modules/cobrancas/cobrancas.module';
 import { ValidarAssinaturaWebhookService } from './validar-assinatura-webhook.service';
 import { WebhookMercadoPagoController } from './webhook-mercado-pago.controller';
 
 @Module({
+  imports: [CobrancasModule],
   controllers: [WebhookMercadoPagoController],
-  providers: [
-    ValidarAssinaturaWebhookService,
-    RegistroNotificacaoWebhookService,
-    ConsultarOrderMercadoPagoService,
-    RegistroEntregaWebhookProvaService,
-  ],
+  providers: [ValidarAssinaturaWebhookService],
   exports: [ValidarAssinaturaWebhookService],
 })
 export class WebhookMercadoPagoModule {}
