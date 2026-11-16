@@ -11,10 +11,17 @@ describe('obterClienteTransacao', () => {
     expect(obterClienteTransacao(contexto, prisma as never)).toBe(tx);
   });
 
-  it('usa prisma raiz quando contexto é falso de teste', () => {
+  it('usa prisma raiz quando contexto não é informado', () => {
+    const prisma = { tag: 'root' };
+    expect(obterClienteTransacao(undefined, prisma as never)).toBe(prisma);
+  });
+
+  it('falha quando contexto tem marca mas não é PrismaContextoTransacao', () => {
     const prisma = { tag: 'root' };
     const contexto = { [ContextoTransacaoMarca]: undefined };
 
-    expect(obterClienteTransacao(contexto, prisma as never)).toBe(prisma);
+    expect(() => obterClienteTransacao(contexto, prisma as never)).toThrow(
+      'Contexto de transação inválido',
+    );
   });
 });

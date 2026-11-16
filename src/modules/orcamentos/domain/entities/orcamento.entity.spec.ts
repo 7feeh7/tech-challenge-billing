@@ -60,6 +60,48 @@ describe('Orcamento', () => {
     ).toThrow();
   });
 
+  it('inicia aprovação incrementando tentativa', () => {
+    const orcamento = new Orcamento(base);
+    orcamento.iniciarAprovacao();
+    expect(orcamento.situacao).toBe(SituacaoOrcamento.APROVACAO_EM_ANDAMENTO);
+    expect(orcamento.tentativaAprovacao).toBe(1);
+  });
+
+  it('volta para GERADO após conflito transitório', () => {
+    const orcamento = new Orcamento({
+      ...base,
+      situacao: SituacaoOrcamento.APROVACAO_EM_ANDAMENTO,
+      tentativaAprovacao: 2,
+    });
+    orcamento.voltarParaGerado();
+    expect(orcamento.situacao).toBe(SituacaoOrcamento.GERADO);
+    expect(orcamento.tentativaAprovacao).toBe(2);
+  });
+
+  it('conclui aprovação com reserva e prazo', () => {
+    const orcamento = new Orcamento({
+      ...base,
+      situacao: SituacaoOrcamento.APROVACAO_EM_ANDAMENTO,
+      tentativaAprovacao: 1,
+    });
+    orcamento.concluirAprovacao(
+      '9c9e6679-7425-40de-944b-e07fc1f90af0',
+      new Date('2026-11-15T12:00:00.000Z'),
+    );
+    expect(orcamento.situacao).toBe(SituacaoOrcamento.APROVADO);
+    expect(orcamento.reservaId).toBeTruthy();
+  });
+
+  it('encerra aprovação em cancelamento', () => {
+    const orcamento = new Orcamento({
+      ...base,
+      situacao: SituacaoOrcamento.APROVACAO_EM_ANDAMENTO,
+      tentativaAprovacao: 1,
+    });
+    orcamento.encerrarAprovacao();
+    expect(orcamento.situacao).toBe(SituacaoOrcamento.CANCELADO);
+  });
+
   it('não permite rejeitar fora de GERADO', () => {
     const orcamento = new Orcamento({
       ...base,

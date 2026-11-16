@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -20,6 +21,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import type { FastifyReply } from 'fastify';
 import {
   OwnershipResource,
   RequireOwnership,
@@ -31,6 +33,7 @@ import {
 } from '@/modules/auth/jwt-payload';
 import { PerfilCliente } from '@/modules/auth/perfil-autorizacao';
 import { PerfilUsuario } from '@/modules/auth/perfil-usuario';
+import { AprovarOrcamentoUseCase } from '@/modules/orcamentos/application/use-cases/aprovar-orcamento.use-case';
 import { BuscarOrcamentoUseCase } from '@/modules/orcamentos/application/use-cases/buscar-orcamento.use-case';
 import { ListarOrcamentosUseCase } from '@/modules/orcamentos/application/use-cases/listar-orcamentos.use-case';
 import { RejeitarOrcamentoUseCase } from '@/modules/orcamentos/application/use-cases/rejeitar-orcamento.use-case';
@@ -44,6 +47,7 @@ export class OrcamentosController {
     private readonly listarOrcamentos: ListarOrcamentosUseCase,
     private readonly buscarOrcamento: BuscarOrcamentoUseCase,
     private readonly rejeitarOrcamento: RejeitarOrcamentoUseCase,
+    private readonly aprovarOrcamento: AprovarOrcamentoUseCase,
   ) {}
 
   @Get()
@@ -82,6 +86,34 @@ export class OrcamentosController {
   @ApiResponse({ status: 404, description: 'Orçamento não encontrado.' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return await this.buscarOrcamento.execute(id);
+  }
+
+  @Post(':id/aprovacao')
+  @Roles(PerfilUsuario.ADMINISTRADOR, PerfilUsuario.ATENDENTE, PerfilCliente)
+  @RequireOwnership(OwnershipResource.ORCAMENTO)
+  @ApiOperation({ summary: 'Aprovar um orçamento (reserva de estoque no OS)' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiResponse({
+    status: 200,
+    description: 'Orçamento aprovado e reserva confirmada.',
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Aprovação em andamento; consulte o orçamento depois.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflito na reserva ou situação inválida.',
+  })
+  async aprovacao(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) resposta: FastifyReply,
+  ) {
+    const resultado = await this.aprovarOrcamento.execute(id);
+    if (resultado.statusHttp === 202) {
+      return resposta.status(202).send(resultado.orcamento);
+    }
+    return resposta.status(200).send(resultado.orcamento);
   }
 
   @Post(':id/rejeicao')

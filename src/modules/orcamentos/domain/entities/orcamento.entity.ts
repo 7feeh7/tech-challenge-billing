@@ -20,6 +20,10 @@ export interface OrcamentoProps {
   itens: ItemOrcamentoSnapshotProps[];
   motivoRejeicao?: string | null;
   tentativaAprovacao?: number;
+  prazoReferencia?: Date | null;
+  reservaId?: string | null;
+  aprovadoEm?: Date | null;
+  bloqueadoAprovacaoAte?: Date | null;
   rejeitadoEm?: Date | null;
   criadoEm?: Date;
 }
@@ -35,6 +39,10 @@ export class Orcamento {
   private _situacao: SituacaoOrcamento;
   private _motivoRejeicao: string | null;
   private _tentativaAprovacao: number;
+  private _prazoReferencia: Date | null;
+  private _reservaId: string | null;
+  private _aprovadoEm: Date | null;
+  private _bloqueadoAprovacaoAte: Date | null;
   private _rejeitadoEm: Date | null;
   readonly criadoEm: Date;
 
@@ -56,6 +64,10 @@ export class Orcamento {
     this._situacao = props.situacao ?? SituacaoOrcamento.GERADO;
     this._motivoRejeicao = Orcamento.normalizarTexto(props.motivoRejeicao);
     this._tentativaAprovacao = props.tentativaAprovacao ?? 0;
+    this._prazoReferencia = props.prazoReferencia ?? null;
+    this._reservaId = Orcamento.normalizarTexto(props.reservaId);
+    this._aprovadoEm = props.aprovadoEm ?? null;
+    this._bloqueadoAprovacaoAte = props.bloqueadoAprovacaoAte ?? null;
     this._rejeitadoEm = props.rejeitadoEm ?? null;
     this.criadoEm = props.criadoEm ?? new Date();
   }
@@ -72,8 +84,70 @@ export class Orcamento {
   get tentativaAprovacao() {
     return this._tentativaAprovacao;
   }
+  get prazoReferencia() {
+    return this._prazoReferencia;
+  }
+  get reservaId() {
+    return this._reservaId;
+  }
+  get aprovadoEm() {
+    return this._aprovadoEm;
+  }
+  get bloqueadoAprovacaoAte() {
+    return this._bloqueadoAprovacaoAte;
+  }
   get rejeitadoEm() {
     return this._rejeitadoEm;
+  }
+
+  iniciarAprovacao(): void {
+    if (this._situacao !== SituacaoOrcamento.GERADO) {
+      throw new SituacaoOrcamentoInvalidaError(this._situacao, 'aprovar');
+    }
+    this._tentativaAprovacao += 1;
+    this._situacao = SituacaoOrcamento.APROVACAO_EM_ANDAMENTO;
+    this._bloqueadoAprovacaoAte = null;
+  }
+
+  voltarParaGerado(): void {
+    if (this._situacao !== SituacaoOrcamento.APROVACAO_EM_ANDAMENTO) {
+      throw new SituacaoOrcamentoInvalidaError(
+        this._situacao,
+        'voltar para GERADO',
+      );
+    }
+    this._situacao = SituacaoOrcamento.GERADO;
+    this._bloqueadoAprovacaoAte = null;
+  }
+
+  encerrarAprovacao(): void {
+    if (this._situacao !== SituacaoOrcamento.APROVACAO_EM_ANDAMENTO) {
+      throw new SituacaoOrcamentoInvalidaError(this._situacao, 'encerrar');
+    }
+    this._situacao = SituacaoOrcamento.CANCELADO;
+    this._bloqueadoAprovacaoAte = null;
+  }
+
+  concluirAprovacao(
+    reservaId: string,
+    prazoReferencia: Date,
+    aprovadoEm: Date = new Date(),
+  ): void {
+    if (this._situacao !== SituacaoOrcamento.APROVACAO_EM_ANDAMENTO) {
+      throw new SituacaoOrcamentoInvalidaError(
+        this._situacao,
+        'concluir aprovação',
+      );
+    }
+    this._situacao = SituacaoOrcamento.APROVADO;
+    this._reservaId = Orcamento.normalizarUuid(reservaId, 'reservaId');
+    this._prazoReferencia = prazoReferencia;
+    this._aprovadoEm = aprovadoEm;
+    this._bloqueadoAprovacaoAte = null;
+  }
+
+  definirBloqueioAprovacao(ate: Date | null): void {
+    this._bloqueadoAprovacaoAte = ate;
   }
 
   rejeitar(motivo: string, agora: Date = new Date()): void {

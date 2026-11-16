@@ -19,6 +19,10 @@ export class PrismaOrcamentoMapper {
       situacao: raw.situacao as SituacaoOrcamento,
       motivoRejeicao: raw.motivoRejeicao,
       tentativaAprovacao: raw.tentativaAprovacao,
+      prazoReferencia: raw.prazoReferencia,
+      reservaId: raw.reservaId,
+      aprovadoEm: raw.aprovadoEm,
+      bloqueadoAprovacaoAte: raw.bloqueadoAprovacaoAte,
       rejeitadoEm: raw.rejeitadoEm,
       criadoEm: raw.criadoEm,
       itens: raw.itens.map((item) => ({
@@ -41,6 +45,10 @@ export class PrismaOrcamentoMapper {
       situacao: orcamento.situacao,
       motivoRejeicao: orcamento.motivoRejeicao,
       tentativaAprovacao: orcamento.tentativaAprovacao,
+      prazoReferencia: orcamento.prazoReferencia,
+      reservaId: orcamento.reservaId,
+      aprovadoEm: orcamento.aprovadoEm,
+      bloqueadoAprovacaoAte: orcamento.bloqueadoAprovacaoAte,
       rejeitadoEm: orcamento.rejeitadoEm,
       itens: {
         create: orcamento.itens.map((item) => ({
@@ -60,6 +68,10 @@ export class PrismaOrcamentoMapper {
       situacao: orcamento.situacao,
       motivoRejeicao: orcamento.motivoRejeicao,
       tentativaAprovacao: orcamento.tentativaAprovacao,
+      prazoReferencia: orcamento.prazoReferencia,
+      reservaId: orcamento.reservaId,
+      aprovadoEm: orcamento.aprovadoEm,
+      bloqueadoAprovacaoAte: orcamento.bloqueadoAprovacaoAte,
       rejeitadoEm: orcamento.rejeitadoEm,
     };
   }

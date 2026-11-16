@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import {
+  DomainConflictComCodigoError,
   DomainConflictError,
   DomainError,
   DomainNotFoundError,
@@ -43,6 +44,12 @@ export class DomainExceptionFilter implements ExceptionFilter<DomainError> {
     }
     if (error instanceof DomainNotFoundError) {
       return new NotFoundException(error.message);
+    }
+    if (error instanceof DomainConflictComCodigoError) {
+      return new ConflictException({
+        codigo: error.codigo,
+        mensagem: error.message,
+      });
     }
     if (error instanceof DomainConflictError) {
       return new ConflictException(error.message);

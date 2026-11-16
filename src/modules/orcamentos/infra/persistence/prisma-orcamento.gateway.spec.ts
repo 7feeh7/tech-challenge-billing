@@ -95,4 +95,87 @@ describe('PrismaOrcamentoGateway', () => {
     await gateway.criar(contexto, fake);
     expect(clienteTx.orcamento.create).toHaveBeenCalled();
   });
+
+  it('reivindica aprovações pendentes com transação', async () => {
+    prisma.$transaction.mockImplementation(
+      async (trabalho: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'orc-1' }]),
+          orcamento: {
+            updateMany: jest.fn(),
+            findMany: jest.fn().mockResolvedValue([
+              {
+                id: 'orc-1',
+                ordemServicoId: 'os',
+                rodada: 1,
+                clienteId: 'c',
+                correlationId: 'corr',
+                valorTotalCentavos: 10,
+                situacao: 'APROVACAO_EM_ANDAMENTO',
+                motivoRejeicao: null,
+                tentativaAprovacao: 1,
+                prazoReferencia: null,
+                reservaId: null,
+                aprovadoEm: null,
+                bloqueadoAprovacaoAte: null,
+                rejeitadoEm: null,
+                criadoEm: new Date(),
+                atualizadoEm: new Date(),
+                itens: [],
+              },
+            ]),
+          },
+        };
+        return trabalho(tx);
+      },
+    );
+
+    const itens = await gateway.reivindicarAprovacoesPendentes(1000);
+    expect(itens).toHaveLength(1);
+  });
+
+  it('inicia aprovação somente em GERADO', async () => {
+    clienteTx.orcamento.updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    await expect(
+      gateway.iniciarAprovacaoSeGerado(contexto, 'id'),
+    ).resolves.toBeNull();
+  });
+
+  it('inicia aprovação quando GERADO e retorna domínio', async () => {
+    const fake = criarOrcamentoFake();
+    clienteTx.orcamento.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    clienteTx.orcamento.findUnique = jest.fn().mockResolvedValue({
+      id: fake.id,
+      ordemServicoId: fake.ordemServicoId,
+      rodada: fake.rodada,
+      clienteId: fake.clienteId,
+      correlationId: fake.correlationId,
+      valorTotalCentavos: fake.valorTotalCentavos,
+      situacao: 'APROVACAO_EM_ANDAMENTO',
+      motivoRejeicao: null,
+      tentativaAprovacao: 1,
+      bloqueadoAprovacaoAte: null,
+      rejeitadoEm: null,
+      criadoEm: new Date(),
+      atualizadoEm: new Date(),
+      itens: [],
+    });
+    const resultado = await gateway.iniciarAprovacaoSeGerado(
+      contexto,
+      fake.id as string,
+    );
+    expect(resultado?.situacao).toBe('APROVACAO_EM_ANDAMENTO');
+  });
+
+  it('adia bloqueio de aprovação', async () => {
+    prisma.orcamento.update = jest.fn();
+    await gateway.adiarBloqueioAprovacao('orc-1', 5000);
+    expect(prisma.orcamento.update).toHaveBeenCalled();
+  });
+
+  it('libera bloqueio de aprovação', async () => {
+    prisma.orcamento.update = jest.fn();
+    await gateway.liberarBloqueioAprovacao('orc-1');
+    expect(prisma.orcamento.update).toHaveBeenCalled();
+  });
 });

@@ -17,6 +17,9 @@ export interface OrcamentoOutput {
   situacao: string;
   motivoRejeicao: string | null;
   tentativaAprovacao: number;
+  prazoReferencia: string | null;
+  reservaId: string | null;
+  aprovadoEm: string | null;
   itens: OrcamentoItemOutput[];
   rejeitadoEm: string | null;
   criadoEm: string;
@@ -44,6 +47,9 @@ export class OrcamentoOutputMapper {
       situacao: orcamento.situacao,
       motivoRejeicao: orcamento.motivoRejeicao,
       tentativaAprovacao: orcamento.tentativaAprovacao,
+      prazoReferencia: orcamento.prazoReferencia?.toISOString() ?? null,
+      reservaId: orcamento.reservaId,
+      aprovadoEm: orcamento.aprovadoEm?.toISOString() ?? null,
       itens: orcamento.itens.map((item) => ({
         tipo: item.tipo,
         itemId: item.itemId,

@@ -1,5 +1,6 @@
 import type { ArgumentsHost } from '@nestjs/common';
 import type { HttpAdapterHost } from '@nestjs/core';
+import { EstoqueInsuficienteAprovacaoError } from '@/modules/orcamentos/domain/errors/orcamento.errors';
 import {
   DomainConflictError,
   DomainError,
@@ -77,5 +78,13 @@ describe('DomainExceptionFilter', () => {
   it('traduz erro genérico de domínio para 500', () => {
     filter.catch(new ErroGenericoTeste(), host);
     expect(statusRespondido()).toBe(500);
+  });
+
+  it('traduz conflito com código estável no corpo', () => {
+    filter.catch(new EstoqueInsuficienteAprovacaoError(), host);
+    expect(statusRespondido()).toBe(409);
+    expect(JSON.stringify(reply.mock.calls[0][1])).toContain(
+      'ESTOQUE_INSUFICIENTE',
+    );
   });
 });

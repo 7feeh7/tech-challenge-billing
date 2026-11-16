@@ -1,1 +1,2 @@
 export const ORCAMENTO_GATEWAY = Symbol('ORCAMENTO_GATEWAY');
+export const RESERVA_OS_GATEWAY = Symbol('RESERVA_OS_GATEWAY');
