@@ -35,9 +35,13 @@ A cobertura é reportada em `coverage/lcov.info` para o SonarCloud.
 
 Mensagens não financeiras em `docs/contratos/` com exemplos JSON validados nos testes.
 
-## Infraestrutura
+## Infraestrutura e deploy
 
-- Kubernetes: `k8s/` (namespace `billing`, Deployment `billing-api`)
-- Terraform: `terraform/` (`tech-challenge-producao-billing-in`, DLQ, ECR `tech-challenge-billing-producao`)
+- Kubernetes: `k8s/` (namespace `billing`, Deployment `billing-api`, HPA **1–3** [D5.5], Job `billing-migrate`)
+- Terraform: `terraform/` (fila `billing-in` + DLQ, ECR `tech-challenge-billing-producao`, contêiner `mercado-pago`, exports SSM)
+- Workflows na `main` + _environment_ `producao`:
+  - `deploy.yml`: testes (R4-39) → Terraform apply → imagem com tag SHA → deploy (após migration manual)
+  - `migrate.yml`: Prisma migrate por `workflow_dispatch`
+  - `terraform.yml`: push em `terraform/**` ou `workflow_dispatch` (`plan` padrão; `destroy` exige `DESTRUIR-tech-challenge-billing`)
 
-Deploy só na branch `main` com _environment_ `producao` (ver runbook Fase 4).
+Documentação dos manifests: `k8s/README.md`. Ordem operacional: runbook fase 7 (`13-deployment-runbook.md`).

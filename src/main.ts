@@ -6,11 +6,14 @@ import {
 } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from '@/app.module';
+import { validarConfiguracaoBilling } from '@/shared/config/validar-configuracao-billing';
 import { JsonLoggerService } from '@/shared/observability/json-logger.service';
 
 const PORT = Number(process.env.PORT ?? 3000);
 
 async function bootstrap() {
+  validarConfiguracaoBilling();
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
@@ -19,6 +22,7 @@ async function bootstrap() {
 
   const logger = app.get(JsonLoggerService);
   app.useLogger(logger);
+  app.enableShutdownHooks();
 
   app.setGlobalPrefix('v1', {
     exclude: [

@@ -53,6 +53,7 @@ export class ProcessadorExpiracaoCobrancasService
     this.posseMs = calcularPosseCobrancaMs({
       loteConciliacao,
       loteCriacao,
+      loteExpiracao: this.lote,
       mpRequestTimeoutMs: mpTimeout,
       overrideMs: overridePosse ? Number(overridePosse) : undefined,
     });

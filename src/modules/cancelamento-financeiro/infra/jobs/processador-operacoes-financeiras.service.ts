@@ -48,6 +48,9 @@ export class ProcessadorOperacoesFinanceirasService
     const mpTimeout = Number(
       this.config.get<string>('MP_REQUEST_TIMEOUT_MS') ?? '30000',
     );
+    const mpRetryBackoff = Number(
+      this.config.get<string>('CANCELAMENTO_FINANCEIRO_RETRY_MP_MS') ?? '30000',
+    );
     const overrideRaw =
       this.config.get<string>('CANCELAMENTO_FINANCEIRO_REIVINDICACAO_MS') ??
       this.config.get<string>('COBRANCA_REIVINDICACAO_MS');
@@ -55,6 +58,7 @@ export class ProcessadorOperacoesFinanceirasService
     this.posseMs = calcularPosseCancelamentoFinanceiroMs({
       lote: this.lote,
       mpRequestTimeoutMs: mpTimeout,
+      mpRetryBackoffMs: mpRetryBackoff,
       overrideMs: override,
     });
   }

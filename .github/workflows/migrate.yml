@@ -1,0 +1,133 @@
+name: Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Tag da imagem no ECR (padrão = SHA do commit atual)
+        required: false
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  K8S_NAMESPACE: billing
+  TF_ENVIRONMENT: producao
+  OS_SERVICE_BASE_URL: http://oficina-api.oficina.svc.cluster.local
+
+concurrency:
+  group: billing-producao-pipeline
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Prisma Migrate (Job)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: producao
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolver parametros via SSM
+        id: ssm
+        run: |
+          PREFIX="/tech-challenge/${{ env.TF_ENVIRONMENT }}"
+          ECR=$(aws ssm get-parameter --name "${PREFIX}/infra/billing_ecr_repository_url" --query Parameter.Value --output text)
+          EKS=$(aws ssm get-parameter --name "${PREFIX}/infra/eks_cluster_name" --query Parameter.Value --output text)
+          API_GATEWAY_URL=$(aws ssm get-parameter --name "${PREFIX}/infra/api_gateway_url" --query Parameter.Value --output text)
+          BILLING_IN=$(aws ssm get-parameter --name "${PREFIX}/infra/billing_in_queue_url" --query Parameter.Value --output text)
+          OS_IN=$(aws ssm get-parameter --name "${PREFIX}/infra/os_in_queue_url" --query Parameter.Value --output text)
+          IRSA=$(aws ssm get-parameter --name "${PREFIX}/infra/billing_irsa_role_arn" --query Parameter.Value --output text)
+          BILLING_DB_ARN=$(aws ssm get-parameter --name "${PREFIX}/database/billing_db_secret_arn" --query Parameter.Value --output text)
+          JWT_PUBLIC_ARN=$(aws ssm get-parameter --name "${PREFIX}/infra/jwt_public_secret_arn" --query Parameter.Value --output text)
+          TOKEN_BILLING_OS_ARN=$(aws ssm get-parameter --name "${PREFIX}/infra/token_billing_os_secret_arn" --query Parameter.Value --output text)
+          MP_ARN=$(aws ssm get-parameter --name "${PREFIX}/infra/mercado_pago_secret_arn" --query Parameter.Value --output text)
+          echo "ecr=$ECR" >> $GITHUB_OUTPUT
+          echo "eks=$EKS" >> $GITHUB_OUTPUT
+          echo "api_gateway_url=$API_GATEWAY_URL" >> $GITHUB_OUTPUT
+          echo "billing_in=$BILLING_IN" >> $GITHUB_OUTPUT
+          echo "os_in=$OS_IN" >> $GITHUB_OUTPUT
+          echo "irsa=$IRSA" >> $GITHUB_OUTPUT
+          echo "billing_db_arn=$BILLING_DB_ARN" >> $GITHUB_OUTPUT
+          echo "jwt_public_arn=$JWT_PUBLIC_ARN" >> $GITHUB_OUTPUT
+          echo "token_billing_os_arn=$TOKEN_BILLING_OS_ARN" >> $GITHUB_OUTPUT
+          echo "mp_arn=$MP_ARN" >> $GITHUB_OUTPUT
+
+      - name: Montar DATABASE_URL do Billing
+        id: db
+        run: |
+          SECRET=$(aws secretsmanager get-secret-value --secret-id "${{ steps.ssm.outputs.billing_db_arn }}" --query SecretString --output text)
+          USER=$(echo "$SECRET" | jq -r .username)
+          PASS=$(echo "$SECRET" | jq -r .password)
+          HOST=$(echo "$SECRET" | jq -r .host)
+          PORT=$(echo "$SECRET" | jq -r .port)
+          DB=$(echo "$SECRET" | jq -r .dbname)
+          URL="postgresql://${USER}:${PASS}@${HOST}:${PORT}/${DB}?schema=public"
+          echo "::add-mask::$URL"
+          echo "database_url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Obter segredos da aplicação
+        id: secrets
+        run: |
+          JWT_JSON=$(aws secretsmanager get-secret-value --secret-id "${{ steps.ssm.outputs.jwt_public_arn }}" --query SecretString --output text)
+          JWT=$(echo "$JWT_JSON" | jq -r 'if .publicKey then .publicKey elif .public_key then .public_key else . end')
+          TOKEN_OS=$(aws secretsmanager get-secret-value --secret-id "${{ steps.ssm.outputs.token_billing_os_arn }}" --query SecretString --output text | jq -r 'if .token then .token else . end')
+          MP=$(aws secretsmanager get-secret-value --secret-id "${{ steps.ssm.outputs.mp_arn }}" --query SecretString --output text)
+          MP_ACCESS=$(echo "$MP" | jq -r .MP_ACCESS_TOKEN)
+          MP_WEBHOOK=$(echo "$MP" | jq -r .MP_WEBHOOK_SECRET)
+          echo "jwt_public<<EOF" >> $GITHUB_OUTPUT
+          echo "$JWT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "::add-mask::$TOKEN_OS"
+          echo "::add-mask::$MP_ACCESS"
+          echo "::add-mask::$MP_WEBHOOK"
+          echo "os_token=$TOKEN_OS" >> $GITHUB_OUTPUT
+          echo "mp_access=$MP_ACCESS" >> $GITHUB_OUTPUT
+          echo "mp_webhook=$MP_WEBHOOK" >> $GITHUB_OUTPUT
+
+      - name: Configurar kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "${{ steps.ssm.outputs.eks }}"
+
+      - name: ServiceAccount, ConfigMap e Secret
+        env:
+          IRSA_ARN: ${{ steps.ssm.outputs.irsa }}
+          API_GATEWAY_URL: ${{ steps.ssm.outputs.api_gateway_url }}
+          SQS_BILLING_IN_URL: ${{ steps.ssm.outputs.billing_in }}
+          SQS_OS_IN_URL: ${{ steps.ssm.outputs.os_in }}
+        run: |
+          sed "s|BILLING_IRSA_ROLE_ARN|${IRSA_ARN}|g" k8s/serviceaccount.yaml | kubectl apply -f -
+          sed -e "s|__API_GATEWAY_URL__|${API_GATEWAY_URL}|g" \
+              -e "s|__SQS_BILLING_IN_URL__|${SQS_BILLING_IN_URL}|g" \
+              -e "s|__SQS_OS_IN_URL__|${SQS_OS_IN_URL}|g" \
+              -e "s|__OS_SERVICE_BASE_URL__|${OS_SERVICE_BASE_URL}|g" \
+              k8s/configmap.yaml | kubectl apply -f -
+          kubectl create secret generic billing-secret \
+            --namespace "$K8S_NAMESPACE" \
+            --from-literal=DATABASE_URL='${{ steps.db.outputs.database_url }}' \
+            --from-literal=JWT_PUBLIC_KEY='${{ steps.secrets.outputs.jwt_public }}' \
+            --from-literal=OS_SERVICE_TOKEN='${{ steps.secrets.outputs.os_token }}' \
+            --from-literal=MP_ACCESS_TOKEN='${{ steps.secrets.outputs.mp_access }}' \
+            --from-literal=MP_WEBHOOK_SECRET='${{ steps.secrets.outputs.mp_webhook }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Migrations (Job)
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+          ECR_REPOSITORY: ${{ steps.ssm.outputs.ecr }}
+        run: |
+          kubectl delete job billing-migrate \
+            --namespace "$K8S_NAMESPACE" --ignore-not-found
+          sed -e "s|ECR_REPOSITORY_URL:__IMAGE_TAG__|${ECR_REPOSITORY}:${IMAGE_TAG}|g" \
+              k8s/migration-job.yaml | kubectl apply -f -
+          kubectl wait --for=condition=complete job/billing-migrate \
+            --namespace "$K8S_NAMESPACE" --timeout=300s
