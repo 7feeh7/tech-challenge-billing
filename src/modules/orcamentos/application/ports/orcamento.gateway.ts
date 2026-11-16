@@ -19,4 +19,14 @@ export interface OrcamentoGateway {
     limit: number,
     filtros: { ordemServicoId?: string; clienteId?: string },
   ): Promise<{ itens: Orcamento[]; total: number }>;
+  reivindicarAprovacoesPendentes(
+    posseMs: number,
+    limite?: number,
+  ): Promise<Orcamento[]>;
+  liberarBloqueioAprovacao(id: string): Promise<void>;
+  adiarBloqueioAprovacao(id: string, atrasoMs: number): Promise<void>;
+  iniciarAprovacaoSeGerado(
+    contexto: ContextoTransacao,
+    id: string,
+  ): Promise<Orcamento | null>;
 }

@@ -1,0 +1,1 @@
+export const COBRANCA_GATEWAY = Symbol('COBRANCA_GATEWAY');

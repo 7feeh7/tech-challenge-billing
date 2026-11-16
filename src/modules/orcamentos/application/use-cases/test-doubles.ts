@@ -33,6 +33,10 @@ export const criarGatewayOrcamentoMock = (): jest.Mocked<OrcamentoGateway> => ({
   criar: jest.fn(),
   atualizar: jest.fn(),
   listar: jest.fn(),
+  reivindicarAprovacoesPendentes: jest.fn(),
+  liberarBloqueioAprovacao: jest.fn(),
+  adiarBloqueioAprovacao: jest.fn(),
+  iniciarAprovacaoSeGerado: jest.fn(),
 });
 
 export const criarMensagemProcessadaMock =

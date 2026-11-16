@@ -18,5 +18,15 @@ export abstract class DomainNotFoundError extends DomainError {}
 /** Conflito com o estado atual. */
 export abstract class DomainConflictError extends DomainError {}
 
+/** Conflito de negócio com código estável para a API. */
+export class DomainConflictComCodigoError extends DomainConflictError {
+  constructor(
+    readonly codigo: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /** Credenciais ausentes ou inválidas. */
 export abstract class DomainUnauthorizedError extends DomainError {}
