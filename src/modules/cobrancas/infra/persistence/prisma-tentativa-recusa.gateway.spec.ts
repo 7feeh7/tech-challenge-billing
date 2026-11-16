@@ -9,9 +9,7 @@ describe('PrismaTentativaRecusaGateway', () => {
         create: jest.fn(),
       },
     };
-    const prisma = {
-      tentativaPagamentoRecusada: clienteTx.tentativaPagamentoRecusada,
-    };
+    const prisma = { tentativaPagamentoRecusada: clienteTx.tentativaPagamentoRecusada };
     const gateway = new PrismaTentativaRecusaGateway(prisma as never);
     const contexto = new PrismaContextoTransacao(clienteTx as never);
 
@@ -32,9 +30,7 @@ describe('PrismaTentativaRecusaGateway', () => {
         create: jest.fn(),
       },
     };
-    const prisma = {
-      tentativaPagamentoRecusada: clienteTx.tentativaPagamentoRecusada,
-    };
+    const prisma = { tentativaPagamentoRecusada: clienteTx.tentativaPagamentoRecusada };
     const gateway = new PrismaTentativaRecusaGateway(prisma as never);
     const contexto = new PrismaContextoTransacao(clienteTx as never);
     const nova = await gateway.registrarSeNova(contexto, {

@@ -58,9 +58,7 @@ describe('interpretarSituacaoFinanceira', () => {
       status: 'created',
       pagamentos: [],
     };
-    expect(interpretarSituacaoFinanceira(order).tipo).toBe(
-      'aguardando_pagamento',
-    );
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe('aguardando_pagamento');
   });
 
   it('classifica situação não mapeada como indeterminada', () => {
