@@ -41,7 +41,9 @@ describe('Cobranca', () => {
       ...base,
       prazoPagamento: new Date('2000-01-01T00:00:00.000Z'),
     });
-    expect(cobranca.aindaNoPrazo(new Date('2026-01-01T00:00:00.000Z'))).toBe(false);
+    expect(cobranca.aindaNoPrazo(new Date('2026-01-01T00:00:00.000Z'))).toBe(
+      false,
+    );
   });
 
   it('rejeita confirmar pagamento fora de PENDENTE', () => {
@@ -49,5 +51,32 @@ describe('Cobranca', () => {
     expect(() => cobranca.confirmarPagamento(new Date())).toThrow(
       SituacaoCobrancaInvalidaError,
     );
+  });
+
+  it('transiciona cancelamento e estorno', () => {
+    const pendente = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENTE,
+    });
+    pendente.marcarCancelada();
+    expect(pendente.situacao).toBe(SituacaoCobranca.CANCELADA);
+
+    const paga = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PAGA,
+      pagamentoConfirmadoEm: new Date(),
+    });
+    paga.iniciarEstorno();
+    expect(paga.situacao).toBe(SituacaoCobranca.ESTORNO_EM_ANDAMENTO);
+    paga.marcarEstornada();
+    expect(paga.situacao).toBe(SituacaoCobranca.ESTORNADA);
+
+    const paga2 = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PAGA,
+      pagamentoConfirmadoEm: new Date(),
+    });
+    paga2.marcarPendenciaManual();
+    expect(paga2.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
   });
 });

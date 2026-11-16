@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { obterClienteTransacao } from '@/shared/database/obter-cliente-transacao';
 import { PrismaService } from '@/shared/database/prisma.service';
@@ -63,23 +64,38 @@ export class PrismaOperacaoCriacaoOrderGateway
     });
   }
 
-  async reiniciarParaNovaOrder(
+  async garantirReemissaoEmAndamento(
     contexto: ContextoTransacao,
     cobrancaId: string,
-    novaChaveIdempotencia: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const cliente = obterClienteTransacao(contexto, this.prisma);
-    await cliente.operacaoCriacaoOrder.upsert({
+    const existente = await cliente.operacaoCriacaoOrder.findUnique({
       where: { cobrancaId },
-      create: {
+    });
+
+    if (existente?.situacao === 'EM_ANDAMENTO') {
+      return existente.chaveIdempotencia;
+    }
+
+    const novaChave = randomUUID();
+    if (existente) {
+      await cliente.operacaoCriacaoOrder.update({
+        where: { cobrancaId },
+        data: {
+          chaveIdempotencia: novaChave,
+          situacao: 'EM_ANDAMENTO',
+        },
+      });
+      return novaChave;
+    }
+
+    await cliente.operacaoCriacaoOrder.create({
+      data: {
         cobrancaId,
-        chaveIdempotencia: novaChaveIdempotencia,
-        situacao: 'EM_ANDAMENTO',
-      },
-      update: {
-        chaveIdempotencia: novaChaveIdempotencia,
+        chaveIdempotencia: novaChave,
         situacao: 'EM_ANDAMENTO',
       },
     });
+    return novaChave;
   }
 }

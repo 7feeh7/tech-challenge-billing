@@ -50,7 +50,7 @@ describe('PrismaOperacaoCriacaoOrderGateway', () => {
     };
     const prisma = { operacaoCriacaoOrder: clienteTx.operacaoCriacaoOrder };
     const gateway = new PrismaOperacaoCriacaoOrderGateway(prisma as never);
-  const contexto = new PrismaContextoTransacao(clienteTx as never);
+    const contexto = new PrismaContextoTransacao(clienteTx as never);
     await gateway.marcarConcluida(contexto, 'c1');
     expect(clienteTx.operacaoCriacaoOrder.update).toHaveBeenCalled();
   });
@@ -58,21 +58,28 @@ describe('PrismaOperacaoCriacaoOrderGateway', () => {
   it('reinicia operação com nova chave', async () => {
     const clienteTx = {
       operacaoCriacaoOrder: {
-        upsert: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'op1',
+          cobrancaId: 'c1',
+          chaveIdempotencia: 'k-antiga',
+          situacao: 'CONCLUIDA',
+        }),
+        update: jest.fn().mockResolvedValue({
           id: 'op1',
           cobrancaId: 'c1',
           chaveIdempotencia: 'nova-chave',
           situacao: 'EM_ANDAMENTO',
         }),
-        findUnique: jest.fn(),
-        update: jest.fn(),
+        upsert: jest.fn(),
+        create: jest.fn(),
       },
     };
     const prisma = { operacaoCriacaoOrder: clienteTx.operacaoCriacaoOrder };
     const gateway = new PrismaOperacaoCriacaoOrderGateway(prisma as never);
     const contexto = new PrismaContextoTransacao(clienteTx as never);
 
-    await gateway.reiniciarParaNovaOrder(contexto, 'c1', 'nova-chave');
-    expect(clienteTx.operacaoCriacaoOrder.upsert).toHaveBeenCalled();
+    const chave = await gateway.garantirReemissaoEmAndamento(contexto, 'c1');
+    expect(chave).toBeDefined();
+    expect(clienteTx.operacaoCriacaoOrder.update).toHaveBeenCalled();
   });
 });

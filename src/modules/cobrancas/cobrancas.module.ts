@@ -1,5 +1,8 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BloqueioCriacaoCobrancaGateway } from '@/modules/cancelamento-financeiro/application/ports/bloqueio-criacao-cobranca.gateway';
+import { BLOQUEIO_CRIACAO_COBRANCA_GATEWAY } from '@/modules/cancelamento-financeiro/application/ports/tokens';
+import { CancelamentoFinanceiroModule } from '@/modules/cancelamento-financeiro/cancelamento-financeiro.module';
 import type { UnitOfWork } from '@/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '@/shared/database/unit-of-work.port';
 import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.gateway';
@@ -21,6 +24,7 @@ import {
 } from './application/ports/tokens';
 import { ConciliarCobrancaService } from './application/services/conciliar-cobranca.service';
 import { CriarOrderMercadoPagoService } from './application/services/criar-order-mercado-pago.service';
+import { ReemitirOrderMercadoPagoService } from './application/services/reemitir-order-mercado-pago.service';
 import { ListarCobrancasUseCase } from './application/use-cases/listar-cobrancas.use-case';
 import { ProcessarNotificacaoMercadoPagoUseCase } from './application/use-cases/processar-notificacao-mercado-pago.use-case';
 import { CobrancasController } from './infra/http/controllers/cobrancas.controller';
@@ -34,7 +38,7 @@ import { PrismaOrderMercadoPagoGateway } from './infra/persistence/prisma-order-
 import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentativa-recusa.gateway';
 
 @Module({
-  imports: [MensageriaModule],
+  imports: [MensageriaModule, forwardRef(() => CancelamentoFinanceiroModule)],
   controllers: [CobrancasController],
   providers: [
     PrismaCobrancaGateway,
@@ -59,7 +63,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
     },
     { provide: MERCADO_PAGO_GATEWAY, useExisting: FetchMercadoPagoGateway },
     {
-      provide: CriarOrderMercadoPagoService,
+      provide: ReemitirOrderMercadoPagoService,
       useFactory: (
         uow: UnitOfWork,
         cobrancas: CobrancaGateway,
@@ -67,15 +71,17 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         orders: OrderMercadoPagoGateway,
         mp: MercadoPagoGateway,
         outbox: OutboxGateway,
+        bloqueios: BloqueioCriacaoCobrancaGateway,
         config: ConfigService,
       ) =>
-        new CriarOrderMercadoPagoService(
+        new ReemitirOrderMercadoPagoService(
           uow,
           cobrancas,
           operacoes,
           orders,
           mp,
           outbox,
+          bloqueios,
           config.get<string>('MP_PAYER_EMAIL')?.trim() ??
             'comprador@example.com',
         ),
@@ -86,6 +92,41 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         ORDER_MERCADO_PAGO_GATEWAY,
         MERCADO_PAGO_GATEWAY,
         OUTBOX_GATEWAY,
+        BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
+        ConfigService,
+      ],
+    },
+    {
+      provide: CriarOrderMercadoPagoService,
+      useFactory: (
+        uow: UnitOfWork,
+        cobrancas: CobrancaGateway,
+        operacoes: OperacaoCriacaoOrderGateway,
+        orders: OrderMercadoPagoGateway,
+        mp: MercadoPagoGateway,
+        outbox: OutboxGateway,
+        bloqueios: BloqueioCriacaoCobrancaGateway,
+        config: ConfigService,
+      ) =>
+        new CriarOrderMercadoPagoService(
+          uow,
+          cobrancas,
+          operacoes,
+          orders,
+          mp,
+          outbox,
+          bloqueios,
+          config.get<string>('MP_PAYER_EMAIL')?.trim() ??
+            'comprador@example.com',
+        ),
+      inject: [
+        UNIT_OF_WORK,
+        COBRANCA_GATEWAY,
+        OPERACAO_CRIACAO_ORDER_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+        BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
         ConfigService,
       ],
     },
@@ -97,9 +138,8 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         orders: OrderMercadoPagoGateway,
         mp: MercadoPagoGateway,
         tentativas: TentativaRecusaGateway,
-        operacoes: OperacaoCriacaoOrderGateway,
         outbox: OutboxGateway,
-        config: ConfigService,
+        reemitir: ReemitirOrderMercadoPagoService,
       ) =>
         new ConciliarCobrancaService(
           uow,
@@ -107,10 +147,8 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
           orders,
           mp,
           tentativas,
-          operacoes,
           outbox,
-          config.get<string>('MP_PAYER_EMAIL')?.trim() ??
-            'comprador@example.com',
+          reemitir,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -118,9 +156,8 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         ORDER_MERCADO_PAGO_GATEWAY,
         MERCADO_PAGO_GATEWAY,
         TENTATIVA_RECUSA_GATEWAY,
-        OPERACAO_CRIACAO_ORDER_GATEWAY,
         OUTBOX_GATEWAY,
-        ConfigService,
+        ReemitirOrderMercadoPagoService,
       ],
     },
     {
@@ -155,6 +192,8 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
   ],
   exports: [
     COBRANCA_GATEWAY,
+    ORDER_MERCADO_PAGO_GATEWAY,
+    OPERACAO_CRIACAO_ORDER_GATEWAY,
     ProcessarNotificacaoMercadoPagoUseCase,
     ConciliarCobrancaService,
     MERCADO_PAGO_GATEWAY,

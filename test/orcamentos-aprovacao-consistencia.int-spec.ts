@@ -14,8 +14,7 @@ import {
   encerrarDublê,
   iniciarDublêOsReservas,
 } from './helpers/dublê-os-reservas';
-
-const databaseUrl = process.env.DATABASE_URL;
+import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 
 describe('Orçamentos — consistência da aprovação (integração)', () => {
   let prisma: PrismaService;
@@ -32,16 +31,8 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
     ),
   );
 
-  const pular = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: testes de consistência ignorados.');
-      return true;
-    }
-    return false;
-  };
-
-  beforeAll(async () => {
-    if (pular()) return;
+  beforeAll(() => {
+    exigirDatabaseUrl();
   });
 
   afterAll(async () => {
@@ -49,7 +40,6 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   beforeEach(async () => {
-    if (pular()) return;
     if (prisma) {
       await prisma.cobranca.deleteMany();
       await prisma.orcamentoItem.deleteMany();
@@ -109,7 +99,6 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   }
 
   it('aprovação concorrente não duplica tentativa nem cobrança', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('sucesso');
     try {
       await montarModulo(dublê.url);
@@ -131,7 +120,6 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   it('rollback integral se cobrança falhar na mesma transação', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('sucesso');
     try {
       const module = await Test.createTestingModule({
@@ -176,7 +164,6 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   it('processador recupera com a mesma Idempotency-Key', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('sucesso');
     try {
       await montarModulo(dublê.url);

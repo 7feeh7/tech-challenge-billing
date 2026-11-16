@@ -3,6 +3,10 @@ import type { Orcamento } from '../../domain/entities/orcamento.entity';
 
 export interface OrcamentoGateway {
   buscarPorId(id: string): Promise<Orcamento | null>;
+  buscarPorOrdemServicoERodadaLeitura(
+    ordemServicoId: string,
+    rodada: number,
+  ): Promise<Orcamento | null>;
   buscarPorOrdemServicoERodada(
     contexto: ContextoTransacao,
     ordemServicoId: string,

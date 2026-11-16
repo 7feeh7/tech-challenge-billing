@@ -7,23 +7,17 @@ import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.
 import {
   DESTINO_FILA_OS,
   type EnvelopeMensagem,
-  EVENTO_COBRANCA_CRIADA,
   EVENTO_PAGAMENTO_CONFIRMADO,
-  type PayloadCobrancaCriada,
   type PayloadPagamentoConfirmado,
 } from '@/shared/messaging/envelope';
 import { Cobranca } from '../../domain/entities/cobranca.entity';
 import { interpretarSituacaoFinanceira } from '../../domain/interpretar-situacao-order';
 import { SituacaoCobranca } from '../../domain/situacao-cobranca';
-import {
-  calcularExpirationTimeIso,
-  centavosParaValorMercadoPago,
-} from '../calcular-expiration-time';
 import type { CobrancaGateway } from '../ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '../ports/mercado-pago.gateway';
-import type { OperacaoCriacaoOrderGateway } from '../ports/operacao-criacao-order.gateway';
 import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gateway';
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
+import type { ReemitirOrderMercadoPagoService } from './reemitir-order-mercado-pago.service';
 
 export class ConciliarCobrancaService {
   constructor(
@@ -32,9 +26,8 @@ export class ConciliarCobrancaService {
     private readonly orders: OrderMercadoPagoGateway,
     private readonly mercadoPago: MercadoPagoGateway,
     private readonly tentativas: TentativaRecusaGateway,
-    private readonly operacoes: OperacaoCriacaoOrderGateway,
     private readonly outbox: OutboxGateway,
-    private readonly payerEmail: string,
+    private readonly reemitir: ReemitirOrderMercadoPagoService,
   ) {}
 
   async conciliarPorCobrancaId(cobrancaId: string): Promise<void> {
@@ -63,9 +56,13 @@ export class ConciliarCobrancaService {
 
     const interpretacao = interpretarSituacaoFinanceira(consulta.order);
 
-    await this.unitOfWork.executar(async (ctx) => {
+    const reemitirAposCommit = await this.unitOfWork.executar(async (ctx) => {
+      let pedidoReemissao: {
+        cobrancaId: string;
+        posseAte: Date | null;
+      } | null = null;
       const atual = await this.cobrancas.buscarPorId(cobrancaId);
-      if (!atual?.id) return;
+      if (!atual?.id) return pedidoReemissao;
 
       if (order.id) {
         await this.orders.atualizarSituacao(
@@ -79,14 +76,14 @@ export class ConciliarCobrancaService {
       if (atual.jaPaga()) {
         atual.liberarBloqueioConciliacao();
         await this.gravarCobranca(ctx, cobrancaId, atual, posseAte);
-        return;
+        return pedidoReemissao;
       }
 
       if (interpretacao.tipo === 'paga') {
         const copia = this.clonar(atual);
         copia.confirmarPagamento(interpretacao.aprovadoEm);
         if (!(await this.gravarCobranca(ctx, cobrancaId, copia, posseAte))) {
-          return;
+          return pedidoReemissao;
         }
 
         const eventId = randomUUID();
@@ -115,7 +112,7 @@ export class ConciliarCobrancaService {
           correlationId: atual.correlationId,
           destino: DESTINO_FILA_OS,
         });
-        return;
+        return pedidoReemissao;
       }
 
       if (interpretacao.tipo === 'recusada' && order.id) {
@@ -128,7 +125,7 @@ export class ConciliarCobrancaService {
         const copia = this.clonar(atual);
         copia.liberarBloqueioConciliacao();
         await this.gravarCobranca(ctx, cobrancaId, copia, posseAte);
-        return;
+        return pedidoReemissao;
       }
 
       if (interpretacao.tipo === 'encerrada_sem_pagamento') {
@@ -143,15 +140,23 @@ export class ConciliarCobrancaService {
           atual.aindaNoPrazo() &&
           atual.situacao === SituacaoCobranca.PENDENTE
         ) {
-          void this.tentarReemitirOrderForaTransacao(cobrancaId, atual);
+          pedidoReemissao = { cobrancaId, posseAte };
         }
-        return;
+        return pedidoReemissao;
       }
 
       const pendente = this.clonar(atual);
       pendente.liberarBloqueioConciliacao();
       await this.gravarCobranca(ctx, cobrancaId, pendente, posseAte);
+      return pedidoReemissao;
     });
+
+    if (reemitirAposCommit) {
+      await this.reemitir.executar(
+        reemitirAposCommit.cobrancaId,
+        reemitirAposCommit.posseAte,
+      );
+    }
   }
 
   async conciliarPorMercadoPagoOrderId(
@@ -162,73 +167,6 @@ export class ConciliarCobrancaService {
     if (!cobranca?.id) return null;
     await this.conciliarPorCobrancaId(cobranca.id);
     return await this.cobrancas.buscarPorId(cobranca.id);
-  }
-
-  private async tentarReemitirOrderForaTransacao(
-    cobrancaId: string,
-    cobranca: Cobranca,
-  ): Promise<void> {
-    const chave = randomUUID();
-    await this.unitOfWork.executar(async (ctx) => {
-      await this.operacoes.reiniciarParaNovaOrder(ctx, cobrancaId, chave);
-    });
-
-    const resultado = await this.mercadoPago.criarOrder({
-      externalReference: cobrancaId,
-      totalAmount: centavosParaValorMercadoPago(cobranca.valorTotalCentavos),
-      expirationTime: calcularExpirationTimeIso(cobranca.prazoPagamento),
-      idempotencyKey: chave,
-      payerEmail: this.payerEmail,
-    });
-
-    if (resultado.tipo !== 'sucesso') return;
-
-    const eventId = randomUUID();
-    await this.unitOfWork.executar(async (ctx) => {
-      await this.orders.criar(ctx, {
-        cobrancaId,
-        mercadoPagoOrderId: resultado.orderId,
-        chaveIdempotencia: chave,
-        checkoutUrl: resultado.checkoutUrl,
-        statusOrder: resultado.status ?? null,
-        statusDetail: resultado.statusDetail ?? null,
-        ativa: true,
-      });
-
-      const atual = await this.cobrancas.buscarPorId(cobrancaId);
-      if (!atual?.id) return;
-      const copia = this.clonar(atual);
-      copia.marcarPendente(resultado.checkoutUrl);
-      await this.cobrancas.atualizar(ctx, cobrancaId, copia);
-      await this.operacoes.marcarConcluida(ctx, cobrancaId);
-
-      const envelope: EnvelopeMensagem<PayloadCobrancaCriada> = {
-        eventId,
-        eventType: EVENTO_COBRANCA_CRIADA,
-        version: 1,
-        occurredAt: new Date().toISOString(),
-        source: 'billing',
-        correlationId: atual.correlationId,
-        causationId: null,
-        ordemServicoId: atual.ordemServicoId,
-        rodada: atual.rodada,
-        payload: {
-          cobrancaId: atual.id,
-          orderId: resultado.orderId,
-          linkPagamento: resultado.checkoutUrl,
-          prazoPagamento: atual.prazoPagamento.toISOString(),
-          valorCentavos: atual.valorTotalCentavos,
-        },
-      };
-
-      await this.outbox.registrar(ctx, {
-        eventId,
-        eventType: EVENTO_COBRANCA_CRIADA,
-        envelope,
-        correlationId: atual.correlationId,
-        destino: DESTINO_FILA_OS,
-      });
-    });
   }
 
   private async liberarBloqueio(

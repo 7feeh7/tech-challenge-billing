@@ -15,6 +15,9 @@ export interface OrderMercadoPagoGateway {
   buscarAtivaPorCobrancaId(
     cobrancaId: string,
   ): Promise<OrderMercadoPagoRegistro | null>;
+  buscarUltimaPorCobrancaId(
+    cobrancaId: string,
+  ): Promise<OrderMercadoPagoRegistro | null>;
   criar(
     contexto: ContextoTransacao,
     registro: OrderMercadoPagoRegistro,

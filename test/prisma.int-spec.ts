@@ -2,16 +2,23 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
+import {
+  exigirDatabaseUrl,
+  verificarConexaoPostgres,
+} from './helpers/exigir-database-integracao';
 
 describe('PrismaService (integração)', () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
+    exigirDatabaseUrl();
+
     const module = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule],
     }).compile();
 
     prisma = module.get(PrismaService);
+    await verificarConexaoPostgres(() => prisma.$queryRaw`SELECT 1`);
   });
 
   afterAll(async () => {

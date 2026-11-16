@@ -3,6 +3,7 @@ import type {
   ContextoTransacao,
   UnitOfWork,
 } from '@/shared/database/unit-of-work.port';
+import { Prisma } from '@/shared/generated/prisma/client';
 import type { MensagemProcessadaGateway } from '@/shared/messaging/application/ports/mensagem-processada.gateway';
 import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.gateway';
 import {
@@ -15,7 +16,6 @@ import {
 } from '@/shared/messaging/envelope';
 import { hashEnvelope } from '@/shared/messaging/hash-envelope';
 import { validarEnvelopeBase } from '@/shared/messaging/validar-envelope';
-import { Prisma } from '@/shared/generated/prisma/client';
 import { Orcamento } from '../../domain/entities/orcamento.entity';
 import { ConteudoMensagemDivergenteError } from '../../domain/errors/orcamento.errors';
 import type { OrcamentoGateway } from '../ports/orcamento.gateway';
@@ -122,11 +122,7 @@ export class ProcessarGerarOrcamentoUseCase {
       destino: DESTINO_FILA_OS,
     });
 
-    await this.mensagensProcessadas.registrar(
-      contexto,
-      envelope.eventId,
-      hash,
-    );
+    await this.mensagensProcessadas.registrar(contexto, envelope.eventId, hash);
   }
 
   private async registrarAposConcorrencia(
@@ -150,11 +146,7 @@ export class ProcessarGerarOrcamentoUseCase {
     if (jaProcessada) {
       return;
     }
-    await this.mensagensProcessadas.registrar(
-      contexto,
-      envelope.eventId,
-      hash,
-    );
+    await this.mensagensProcessadas.registrar(contexto, envelope.eventId, hash);
   }
 }
 

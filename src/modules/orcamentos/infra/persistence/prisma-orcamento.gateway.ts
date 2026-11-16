@@ -21,6 +21,19 @@ export class PrismaOrcamentoGateway implements OrcamentoGateway {
     return raw ? PrismaOrcamentoMapper.toDomain(raw) : null;
   }
 
+  async buscarPorOrdemServicoERodadaLeitura(
+    ordemServicoId: string,
+    rodada: number,
+  ): Promise<Orcamento | null> {
+    const raw = await this.prisma.orcamento.findUnique({
+      where: {
+        ordemServicoId_rodada: { ordemServicoId, rodada },
+      },
+      include: includeItens,
+    });
+    return raw ? PrismaOrcamentoMapper.toDomain(raw) : null;
+  }
+
   async buscarPorOrdemServicoERodada(
     contexto: ContextoTransacao,
     ordemServicoId: string,

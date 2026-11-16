@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { OwnershipGuard } from './modules/auth/guards/ownership.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
+import { CancelamentoFinanceiroModule } from './modules/cancelamento-financeiro/cancelamento-financeiro.module';
 import { CobrancasModule } from './modules/cobrancas/cobrancas.module';
 import { HealthModule } from './modules/health/health.module';
 import { OrcamentosModule } from './modules/orcamentos/orcamentos.module';
@@ -24,6 +25,7 @@ import { ObservabilityModule } from './shared/observability/observability.module
     AuthModule,
     HealthModule,
     CobrancasModule,
+    CancelamentoFinanceiroModule,
     WebhookMercadoPagoModule,
     OrcamentosModule,
   ],

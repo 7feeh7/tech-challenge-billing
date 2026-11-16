@@ -2,15 +2,15 @@ import { UnitOfWorkFake } from '@/shared/database/unit-of-work-fake';
 import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.gateway';
 import { Cobranca } from '../../domain/entities/cobranca.entity';
 import { SituacaoCobranca } from '../../domain/situacao-cobranca';
+import type { AvisoWebhookGateway } from '../ports/aviso-webhook.gateway';
 import type { CobrancaGateway } from '../ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '../ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from '../ports/operacao-criacao-order.gateway';
 import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gateway';
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
+import { ProcessarNotificacaoMercadoPagoUseCase } from '../use-cases/processar-notificacao-mercado-pago.use-case';
 import { ConciliarCobrancaService } from './conciliar-cobranca.service';
 import { CriarOrderMercadoPagoService } from './criar-order-mercado-pago.service';
-import { ProcessarNotificacaoMercadoPagoUseCase } from '../use-cases/processar-notificacao-mercado-pago.use-case';
-import type { AvisoWebhookGateway } from '../ports/aviso-webhook.gateway';
 
 describe('Consistência financeira — cobrança (E17)', () => {
   const prazoOriginal = new Date('2099-06-01T00:00:00.000Z');
@@ -40,7 +40,10 @@ describe('Consistência financeira — cobrança (E17)', () => {
     const mercadoPago: MercadoPagoGateway = {
       criarOrder: jest
         .fn()
-        .mockResolvedValueOnce({ tipo: 'indeterminado', motivo: 'TimeoutError' })
+        .mockResolvedValueOnce({
+          tipo: 'indeterminado',
+          motivo: 'TimeoutError',
+        })
         .mockResolvedValueOnce({
           tipo: 'sucesso',
           orderId: 'ORD1',
@@ -59,10 +62,16 @@ describe('Consistência financeira — cobrança (E17)', () => {
             }
           : null,
       ),
-      garantirEmAndamento: jest.fn().mockImplementation(async (_ctx, _id, chave) => {
-        chavePersistida = chave;
-        return { cobrancaId: 'c1', chaveIdempotencia: chave, situacao: 'EM_ANDAMENTO' };
-      }),
+      garantirEmAndamento: jest
+        .fn()
+        .mockImplementation(async (_ctx, _id, chave) => {
+          chavePersistida = chave;
+          return {
+            cobrancaId: 'c1',
+            chaveIdempotencia: chave,
+            situacao: 'EM_ANDAMENTO',
+          };
+        }),
       marcarConcluida: jest.fn(),
     };
     const intencao = new Cobranca({
@@ -83,12 +92,15 @@ describe('Consistência financeira — cobrança (E17)', () => {
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
       'comprador@example.com',
     );
     await servico.executar('c1');
     await servico.executar('c1');
-    const k1 = (mercadoPago.criarOrder as jest.Mock).mock.calls[0][0].idempotencyKey;
-    const k2 = (mercadoPago.criarOrder as jest.Mock).mock.calls[1][0].idempotencyKey;
+    const k1 = (mercadoPago.criarOrder as jest.Mock).mock.calls[0][0]
+      .idempotencyKey;
+    const k2 = (mercadoPago.criarOrder as jest.Mock).mock.calls[1][0]
+      .idempotencyKey;
     expect(k1).toBe(k2);
   });
 
@@ -134,6 +146,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       orders as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
       'comprador@example.com',
     );
     await servico.executar('c1');
@@ -181,6 +194,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       { buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null) } as never,
       mercadoPago,
       { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
       'comprador@example.com',
     );
     await servico.executar('c1');
@@ -222,9 +236,10 @@ describe('Consistência financeira — cobrança (E17)', () => {
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       {} as TentativaRecusaGateway,
-      {} as OperacaoCriacaoOrderGateway,
       outbox,
-      'comprador@example.com',
+      {
+        executar: jest.fn(),
+      } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
     );
     await conciliar.conciliarPorCobrancaId('c1');
     await conciliar.conciliarPorCobrancaId('c1');
@@ -262,9 +277,10 @@ describe('Consistência financeira — cobrança (E17)', () => {
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       {} as TentativaRecusaGateway,
-      {} as OperacaoCriacaoOrderGateway,
       outbox,
-      'comprador@example.com',
+      {
+        executar: jest.fn(),
+      } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
     );
     const caso = new ProcessarNotificacaoMercadoPagoUseCase(
       new UnitOfWorkFake(),
@@ -285,7 +301,9 @@ describe('Consistência financeira — cobrança (E17)', () => {
     const caso = new ProcessarNotificacaoMercadoPagoUseCase(
       new UnitOfWorkFake(),
       {
-        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(cobrancaPendente),
+        buscarPorMercadoPagoOrderId: jest
+          .fn()
+          .mockResolvedValue(cobrancaPendente),
       } as unknown as CobrancaGateway,
       {
         registrar: jest.fn(async () => {
@@ -313,7 +331,11 @@ describe('Consistência financeira — cobrança (E17)', () => {
           status: 'action_required',
           statusDetail: 'waiting_retry',
           pagamentos: [
-            { id: 'PAY1', status: 'failed', statusDetail: 'insufficient_amount' },
+            {
+              id: 'PAY1',
+              status: 'failed',
+              statusDetail: 'insufficient_amount',
+            },
           ],
         },
       }),
@@ -332,9 +354,10 @@ describe('Consistência financeira — cobrança (E17)', () => {
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       tentativas as unknown as TentativaRecusaGateway,
-      {} as OperacaoCriacaoOrderGateway,
       { registrar: jest.fn() },
-      'comprador@example.com',
+      {
+        executar: jest.fn(),
+      } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(tentativas.registrarSeNova).toHaveBeenCalled();
@@ -387,15 +410,16 @@ describe('Consistência financeira — cobrança (E17)', () => {
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
       {} as TentativaRecusaGateway,
-      {} as OperacaoCriacaoOrderGateway,
       outbox,
-      'comprador@example.com',
+      {
+        executar: jest.fn(),
+      } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalledTimes(1);
-    expect(
-      (outbox.registrar as jest.Mock).mock.calls[0][1].eventType,
-    ).toBe('billing.pagamento-confirmado.v1');
+    expect((outbox.registrar as jest.Mock).mock.calls[0][1].eventType).toBe(
+      'billing.pagamento-confirmado.v1',
+    );
     expect(mercadoPago.consultarOrder).toHaveBeenCalled();
   });
 });

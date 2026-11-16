@@ -14,8 +14,10 @@ import type { OutboxGateway } from '../src/shared/messaging/application/ports/ou
 import { OUTBOX_GATEWAY } from '../src/shared/messaging/application/ports/tokens';
 import { PrismaMensagemProcessadaGateway } from '../src/shared/messaging/infra/persistence/prisma-mensagem-processada.gateway';
 import { MensageriaModule } from '../src/shared/messaging/mensageria.module';
-
-const databaseUrl = process.env.DATABASE_URL;
+import {
+  exigirDatabaseUrl,
+  verificarConexaoPostgres,
+} from './helpers/exigir-database-integracao';
 
 describe('Orçamentos — consistência transacional (integração)', () => {
   let prisma: PrismaService;
@@ -33,7 +35,7 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   );
 
   beforeAll(async () => {
-    if (!databaseUrl) return;
+    exigirDatabaseUrl();
 
     const module = await Test.createTestingModule({
       imports: [
@@ -55,7 +57,7 @@ describe('Orçamentos — consistência transacional (integração)', () => {
     prisma = module.get(PrismaService);
     processar = module.get(ProcessarGerarOrcamentoUseCase);
     rejeitar = module.get(RejeitarOrcamentoUseCase);
-    await prisma.$executeRawUnsafe('SELECT 1');
+    await verificarConexaoPostgres(() => prisma.$queryRaw`SELECT 1`);
   });
 
   afterAll(async () => {
@@ -63,24 +65,13 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   beforeEach(async () => {
-    if (!databaseUrl || !prisma) return;
     await prisma.mensagemOutbox.deleteMany();
     await prisma.mensagemProcessada.deleteMany();
     await prisma.orcamentoItem.deleteMany();
     await prisma.orcamento.deleteMany();
   });
 
-  const pular = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: testes transacionais ignorados.');
-      return true;
-    }
-    return false;
-  };
-
   it('grava orçamento, itens, mensagem processada e outbox na mesma unidade', async () => {
-    if (pular()) return;
-
     await processar.processar(exemplo);
 
     expect(await prisma.orcamento.count()).toBe(1);
@@ -90,7 +81,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('faz rollback integral se a outbox falhar na mesma transação', async () => {
-    if (pular()) return;
 
     const outboxQuebrada: OutboxGateway = {
       registrar: async () => {
@@ -124,7 +114,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('reentrega concorrente não duplica orçamento nem outbox', async () => {
-    if (pular()) return;
 
     await Promise.all([
       processar.processar(exemplo),
@@ -136,7 +125,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('comando com outro eventId e mesma OS/rodada não duplica orçamento', async () => {
-    if (pular()) return;
 
     await processar.processar(exemplo);
     await processar.processar({
@@ -150,7 +138,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('rejeição repetida não duplica evento na outbox', async () => {
-    if (pular()) return;
 
     await processar.processar(exemplo);
     const orc = await prisma.orcamento.findFirst();
@@ -166,7 +153,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('PrismaUnitOfWork desfaz escrita ao falhar no trabalho', async () => {
-    if (pular()) return;
 
     const uow = new PrismaUnitOfWork(prisma, {
       get: () => '10000',

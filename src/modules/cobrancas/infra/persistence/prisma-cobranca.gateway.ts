@@ -38,6 +38,17 @@ export class PrismaCobrancaGateway implements CobrancaGateway {
     return raw ? PrismaCobrancaMapper.toDomain(raw) : null;
   }
 
+  async buscarPorOrdemServicoERodada(
+    ordemServicoId: string,
+    rodada: number,
+  ): Promise<Cobranca | null> {
+    const raw = await this.prisma.cobranca.findFirst({
+      where: { ordemServicoId, rodada },
+      orderBy: { criadoEm: 'desc' },
+    });
+    return raw ? PrismaCobrancaMapper.toDomain(raw) : null;
+  }
+
   async listar(
     page: number,
     limit: number,

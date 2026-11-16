@@ -1,3 +1,4 @@
+import type { BloqueioCriacaoCobrancaGateway } from '@/modules/cancelamento-financeiro/application/ports/bloqueio-criacao-cobranca.gateway';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
 import { Cobranca } from '@/modules/cobrancas/domain/entities/cobranca.entity';
 import type { UnitOfWork } from '@/shared/database/unit-of-work.port';
@@ -30,6 +31,7 @@ export class AplicarResultadoReservaService {
     private readonly unitOfWork: UnitOfWork,
     private readonly orcamentos: OrcamentoGateway,
     private readonly cobrancas: CobrancaGateway,
+    private readonly bloqueios: BloqueioCriacaoCobrancaGateway,
     private readonly carenciaMinutos: number,
   ) {}
 
@@ -132,6 +134,13 @@ export class AplicarResultadoReservaService {
         resultado.prazoReferencia,
         this.carenciaMinutos,
       );
+      const bloqueado = await this.bloqueios.existe(
+        salvo.ordemServicoId,
+        salvo.rodada,
+      );
+      if (bloqueado) {
+        return salvo;
+      }
       await this.cobrancas.criar(
         contexto,
         Cobranca.criarIntencaoAPartirDoOrcamento({

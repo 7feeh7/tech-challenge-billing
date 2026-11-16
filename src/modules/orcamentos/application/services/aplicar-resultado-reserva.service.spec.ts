@@ -24,10 +24,12 @@ describe('AplicarResultadoReservaService', () => {
     liberarBloqueioAprovacao: jest.fn(),
   };
   const cobrancas = { criar: jest.fn(async (_ctx, c) => c) };
+  const bloqueios = { existe: jest.fn().mockResolvedValue(false) };
   const service = new AplicarResultadoReservaService(
     uow,
     orcamentos,
     cobrancas,
+    bloqueios,
     2,
   );
 
