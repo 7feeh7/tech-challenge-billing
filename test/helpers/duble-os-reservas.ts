@@ -17,7 +17,7 @@ export interface RegistroChamadaReserva {
   corpo: string;
 }
 
-export function iniciarDublêOsReservas(cenario: CenarioReserva): Promise<{
+export function iniciarDubleOsReservas(cenario: CenarioReserva): Promise<{
   servidor: Server;
   url: string;
   chamadas: RegistroChamadaReserva[];
@@ -79,7 +79,7 @@ export function iniciarDublêOsReservas(cenario: CenarioReserva): Promise<{
   });
 }
 
-export function encerrarDublê(servidor: Server): Promise<void> {
+export function encerrarDuble(servidor: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     servidor.close((erro) => (erro ? reject(erro) : resolve()));
   });

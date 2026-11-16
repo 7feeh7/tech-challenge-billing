@@ -10,15 +10,15 @@ import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import { configIntegracaoCobrancas } from './helpers/config-integracao-cobrancas';
 import {
-  criarDublêMercadoPagoReemissao,
-  criarDublêMercadoPagoReemissaoSucesso,
-} from './helpers/dublê-mercado-pago-reemissao';
+  criarDubleMercadoPagoReemissao,
+  criarDubleMercadoPagoReemissaoSucesso,
+} from './helpers/duble-mercado-pago-reemissao';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Reemissão de order (integração)', () => {
   let prisma: PrismaService;
-  let dublê: ReturnType<typeof criarDublêMercadoPagoReemissao>;
+  let duble: ReturnType<typeof criarDubleMercadoPagoReemissao>;
   let modulosEncerrar: TestingModule[] = [];
 
   beforeAll(() => {
@@ -132,9 +132,9 @@ describe('Reemissão de order (integração)', () => {
   }
 
   it('concorrência entre duas instâncias Billing cria no máximo uma order apta a pagamento', async () => {
-    dublê = criarDublêMercadoPagoReemissaoSucesso();
-    const instanciaA = await criarInstanciaBilling(dublê.gateway);
-    const instanciaB = await criarInstanciaBilling(dublê.gateway);
+    duble = criarDubleMercadoPagoReemissaoSucesso();
+    const instanciaA = await criarInstanciaBilling(duble.gateway);
+    const instanciaB = await criarInstanciaBilling(duble.gateway);
     prisma = instanciaA.prisma;
     await limparBanco(prisma);
 
@@ -154,9 +154,9 @@ describe('Reemissão de order (integração)', () => {
       where: { cobrancaId, ativa: true },
     });
     expect(totalAtivas).toBe(1);
-    expect(dublê.ordensCriadasNoDublê.length).toBeGreaterThanOrEqual(1);
+    expect(duble.ordensCriadasNoDuble.length).toBeGreaterThanOrEqual(1);
 
-    for (const orderId of dublê.ordensCriadasNoDublê) {
+    for (const orderId of duble.ordensCriadasNoDuble) {
       const local = await prisma.orderMercadoPago.findFirst({
         where: { mercadoPagoOrderId: orderId },
       });
@@ -164,10 +164,10 @@ describe('Reemissão de order (integração)', () => {
     }
   });
 
-  it('timeout após criar order no dublê: segunda instância recupera com mesma chave e sem órfãs', async () => {
-    dublê = criarDublêMercadoPagoReemissao();
-    const instanciaA = await criarInstanciaBilling(dublê.gateway);
-    const instanciaB = await criarInstanciaBilling(dublê.gateway);
+  it('timeout após criar order no duble: segunda instância recupera com mesma chave e sem órfãs', async () => {
+    duble = criarDubleMercadoPagoReemissao();
+    const instanciaA = await criarInstanciaBilling(duble.gateway);
+    const instanciaB = await criarInstanciaBilling(duble.gateway);
     prisma = instanciaA.prisma;
     await limparBanco(prisma);
 
@@ -189,7 +189,7 @@ describe('Reemissão de order (integração)', () => {
     });
     expect(operacaoAposTimeout?.situacao).toBe('EM_ANDAMENTO');
     expect(operacaoAposTimeout?.chaveIdempotencia).toBe(chavePersistida);
-    expect(dublê.ordensCriadasNoDublê).toHaveLength(1);
+    expect(duble.ordensCriadasNoDuble).toHaveLength(1);
     expect(
       await prisma.orderMercadoPago.count({
         where: { cobrancaId, ativa: true },
@@ -204,7 +204,7 @@ describe('Reemissão de order (integração)', () => {
     expect(operacao?.chaveIdempotencia).toBe(chavePersistida);
     expect(operacao?.situacao).toBe('CONCLUIDA');
 
-    const orderId = dublê.ordemPorChave.get(chavePersistida)?.orderId;
+    const orderId = duble.ordemPorChave.get(chavePersistida)?.orderId;
     expect(orderId).toBeDefined();
 
     const orderLocal = await prisma.orderMercadoPago.findFirst({
@@ -212,7 +212,7 @@ describe('Reemissão de order (integração)', () => {
     });
     expect(orderLocal?.ativa).toBe(true);
 
-    for (const idMp of dublê.ordensCriadasNoDublê) {
+    for (const idMp of duble.ordensCriadasNoDuble) {
       const registro = await prisma.orderMercadoPago.findFirst({
         where: { mercadoPagoOrderId: idMp },
       });
@@ -226,7 +226,7 @@ describe('Reemissão de order (integração)', () => {
     ).toBe(1);
 
     expect(
-      dublê.chamadasCriarOrder.every(
+      duble.chamadasCriarOrder.every(
         (c) => c.idempotencyKey === chavePersistida,
       ),
     ).toBe(true);

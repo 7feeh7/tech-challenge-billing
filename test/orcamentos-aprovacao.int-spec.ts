@@ -11,9 +11,9 @@ import { OrcamentosModule } from '../src/modules/orcamentos/orcamentos.module';
 import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import {
-  encerrarDublê,
-  iniciarDublêOsReservas,
-} from './helpers/dublê-os-reservas';
+  encerrarDuble,
+  iniciarDubleOsReservas,
+} from './helpers/duble-os-reservas';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
@@ -103,28 +103,28 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   }
 
   it('aprova com reserva confirmada e persiste intenção de cobrança', async () => {
-    const dublê = await iniciarDublêOsReservas('sucesso');
+    const duble = await iniciarDubleOsReservas('sucesso');
     try {
-      await montarModulo(dublê.url, '3000');
+      await montarModulo(duble.url, '3000');
       const id = await criarOrcamento();
       const resultado = await aprovar.execute(id);
       expect(resultado.statusHttp).toBe(200);
       expect(resultado.orcamento.situacao).toBe(SituacaoOrcamento.APROVADO);
-      expect(dublê.chamadas[0]?.idempotencyKey).toBe(`reserva:${id}:1`);
+      expect(duble.chamadas[0]?.idempotencyKey).toBe(`reserva:${id}:1`);
 
       const cobranca = await prisma.cobranca.findUnique({
         where: { orcamentoId: id },
       });
       expect(cobranca?.situacao).toBe('INTENCAO');
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 
   it('retorna 409 de estoque e mantém orçamento aguardando em GERADO', async () => {
-    const dublê = await iniciarDublêOsReservas('estoque');
+    const duble = await iniciarDubleOsReservas('estoque');
     try {
-      await montarModulo(dublê.url, '3000');
+      await montarModulo(duble.url, '3000');
       const id = await criarOrcamento();
       await expect(aprovar.execute(id)).rejects.toBeInstanceOf(
         EstoqueInsuficienteAprovacaoError,
@@ -138,28 +138,28 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
       );
       const row2 = await prisma.orcamento.findUnique({ where: { id } });
       expect(row2?.tentativaAprovacao).toBe(2);
-      expect(dublê.chamadas.map((c) => c.idempotencyKey)).toEqual([
+      expect(duble.chamadas.map((c) => c.idempotencyKey)).toEqual([
         `reserva:${id}:1`,
         `reserva:${id}:2`,
       ]);
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 
   it('timeout na reserva responde 202 e consulta subsequente não duplica operação', async () => {
-    const dublê = await iniciarDublêOsReservas('timeout');
+    const duble = await iniciarDubleOsReservas('timeout');
     try {
-      await montarModulo(dublê.url, '50');
+      await montarModulo(duble.url, '50');
       const id = await criarOrcamento();
       const resultado = await aprovar.execute(id);
       expect(resultado.statusHttp).toBe(202);
 
       const consulta = await aprovar.execute(id);
       expect(consulta.statusHttp).toBe(202);
-      expect(dublê.chamadas).toHaveLength(1);
+      expect(duble.chamadas).toHaveLength(1);
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 });

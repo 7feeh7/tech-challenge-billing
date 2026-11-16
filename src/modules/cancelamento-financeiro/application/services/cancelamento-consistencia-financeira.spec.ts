@@ -1,5 +1,5 @@
 /**
- * Consolida cenários de consistência financeira da E18 (dublês MP; sem E04/E05).
+ * Consolida cenários de consistência financeira da E18 (dubles MP; sem E04/E05).
  */
 
 import { Cobranca } from '@/modules/cobrancas/domain/entities/cobranca.entity';

@@ -1,20 +1,20 @@
 import type { MercadoPagoGateway } from '@/modules/cobrancas/application/ports/mercado-pago.gateway';
 
-export interface DublêMercadoPagoReemissao {
+export interface DubleMercadoPagoReemissao {
   gateway: MercadoPagoGateway;
-  ordensCriadasNoDublê: string[];
+  ordensCriadasNoDuble: string[];
   ordemPorChave: Map<string, { orderId: string; checkoutUrl: string }>;
   chamadasCriarOrder: Array<{ idempotencyKey: string }>;
 }
 
-export function criarDublêMercadoPagoReemissaoSucesso(
+export function criarDubleMercadoPagoReemissaoSucesso(
   consultaOrderPadrao?: MercadoPagoGateway['consultarOrder'],
-): DublêMercadoPagoReemissao {
+): DubleMercadoPagoReemissao {
   const ordemPorChave = new Map<
     string,
     { orderId: string; checkoutUrl: string }
   >();
-  const ordensCriadasNoDublê: string[] = [];
+  const ordensCriadasNoDuble: string[] = [];
   const chamadasCriarOrder: Array<{ idempotencyKey: string }> = [];
   let sequencia = 0;
 
@@ -35,7 +35,7 @@ export function criarDublêMercadoPagoReemissaoSucesso(
       const orderId = `ORD-REEM-${sequencia}`;
       const checkoutUrl = `https://checkout/${orderId}`;
       ordemPorChave.set(input.idempotencyKey, { orderId, checkoutUrl });
-      ordensCriadasNoDublê.push(orderId);
+      ordensCriadasNoDuble.push(orderId);
       return {
         tipo: 'sucesso',
         orderId,
@@ -59,14 +59,14 @@ export function criarDublêMercadoPagoReemissaoSucesso(
       })),
   };
 
-  return { gateway, ordensCriadasNoDublê, ordemPorChave, chamadasCriarOrder };
+  return { gateway, ordensCriadasNoDuble, ordemPorChave, chamadasCriarOrder };
 }
 
 /**
- * Dublê compartilhado: cria order no "MP" e perde a resposta (timeout)
+ * Duble compartilhado: cria order no "MP" e perde a resposta (timeout)
  * na primeira chamada por chave; retentativas com a mesma chave devolvem sucesso idempotente.
  */
-export function criarDublêMercadoPagoReemissao(
+export function criarDubleMercadoPagoReemissao(
   consultaOrderPadrao: MercadoPagoGateway['consultarOrder'] = async () => ({
     tipo: 'sucesso',
     order: {
@@ -76,12 +76,12 @@ export function criarDublêMercadoPagoReemissao(
       pagamentos: [],
     },
   }),
-): DublêMercadoPagoReemissao {
+): DubleMercadoPagoReemissao {
   const ordemPorChave = new Map<
     string,
     { orderId: string; checkoutUrl: string }
   >();
-  const ordensCriadasNoDublê: string[] = [];
+  const ordensCriadasNoDuble: string[] = [];
   const chamadasCriarOrder: Array<{ idempotencyKey: string }> = [];
   let sequencia = 0;
 
@@ -103,7 +103,7 @@ export function criarDublêMercadoPagoReemissao(
       const orderId = `ORD-REEM-${sequencia}`;
       const checkoutUrl = `https://checkout/${orderId}`;
       ordemPorChave.set(input.idempotencyKey, { orderId, checkoutUrl });
-      ordensCriadasNoDublê.push(orderId);
+      ordensCriadasNoDuble.push(orderId);
 
       return {
         tipo: 'indeterminado',
@@ -115,5 +115,5 @@ export function criarDublêMercadoPagoReemissao(
     consultarOrder: consultaOrderPadrao,
   };
 
-  return { gateway, ordensCriadasNoDublê, ordemPorChave, chamadasCriarOrder };
+  return { gateway, ordensCriadasNoDuble, ordemPorChave, chamadasCriarOrder };
 }
