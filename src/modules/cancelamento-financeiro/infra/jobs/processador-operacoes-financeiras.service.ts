@@ -10,6 +10,7 @@ import { calcularPosseCancelamentoFinanceiroMs } from '@/modules/cobrancas/appli
 import type { OperacaoFinanceiraGateway } from '../../application/ports/operacao-financeira.gateway';
 import { OPERACAO_FINANCEIRA_GATEWAY } from '../../application/ports/tokens';
 import { ExecutarCancelamentoFinanceiroService } from '../../application/services/executar-cancelamento-financeiro.service';
+import { ExecutarConsultaSituacaoFinanceiroService } from '../../application/services/executar-consulta-situacao-financeiro.service';
 
 @Injectable()
 export class ProcessadorOperacoesFinanceirasService
@@ -26,7 +27,8 @@ export class ProcessadorOperacoesFinanceirasService
 
   constructor(
     private readonly config: ConfigService,
-    private readonly executar: ExecutarCancelamentoFinanceiroService,
+    private readonly executarCancelamento: ExecutarCancelamentoFinanceiroService,
+    private readonly executarConsulta: ExecutarConsultaSituacaoFinanceiroService,
     @Inject(OPERACAO_FINANCEIRA_GATEWAY)
     private readonly operacoes: OperacaoFinanceiraGateway,
   ) {
@@ -76,7 +78,11 @@ export class ProcessadorOperacoesFinanceirasService
       this.posseMs,
     );
     for (const operacao of reivindicadas) {
-      await this.executar.executar(operacao.id);
+      if (operacao.tipo === 'CONSULTA_SITUACAO_FINANCEIRA') {
+        await this.executarConsulta.executar(operacao.id);
+      } else {
+        await this.executarCancelamento.executar(operacao.id);
+      }
     }
   }
 }

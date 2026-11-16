@@ -146,6 +146,22 @@ export class Cobranca {
     this._bloqueadoConciliacaoAte = null;
   }
 
+  marcarExpirada(): void {
+    if (this._situacao === SituacaoCobranca.EXPIRADA) {
+      return;
+    }
+    if (this._situacao !== SituacaoCobranca.PENDENTE) {
+      throw new SituacaoCobrancaInvalidaError(this._situacao, 'marcarExpirada');
+    }
+    this._situacao = SituacaoCobranca.EXPIRADA;
+    this._linkPagamento = null;
+    this._bloqueadoConciliacaoAte = null;
+  }
+
+  prazoVencido(agora = new Date()): boolean {
+    return agora.getTime() > this.prazoPagamento.getTime();
+  }
+
   iniciarEstorno(): void {
     if (this._situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO) {
       return;

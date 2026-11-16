@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import type { CobrancaGateway } from '../src/modules/cobrancas/application/ports/cobranca.gateway';
 import { COBRANCA_GATEWAY } from '../src/modules/cobrancas/application/ports/tokens';
 import { AprovarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/aprovar-orcamento.use-case';
@@ -11,12 +11,14 @@ import { OrcamentosModule } from '../src/modules/orcamentos/orcamentos.module';
 import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import {
-  encerrarDublê,
-  iniciarDublêOsReservas,
-} from './helpers/dublê-os-reservas';
+  encerrarDuble,
+  iniciarDubleOsReservas,
+} from './helpers/duble-os-reservas';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Orçamentos — consistência da aprovação (integração)', () => {
+  let nestModule: TestingModule | undefined;
   let prisma: PrismaService;
   let processar: ProcessarGerarOrcamentoUseCase;
   let aprovar: AprovarOrcamentoUseCase;
@@ -36,7 +38,7 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
+    await fecharModuloIntegracao(nestModule);
   });
 
   beforeEach(async () => {
@@ -48,7 +50,8 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   async function montarModulo(osUrl: string) {
-    const module = await Test.createTestingModule({
+    await fecharModuloIntegracao(nestModule);
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -70,9 +73,9 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
       ],
     }).compile();
 
-    prisma = module.get(PrismaService);
-    processar = module.get(ProcessarGerarOrcamentoUseCase);
-    aprovar = module.get(AprovarOrcamentoUseCase);
+    prisma = nestModule.get(PrismaService);
+    processar = nestModule.get(ProcessarGerarOrcamentoUseCase);
+    aprovar = nestModule.get(AprovarOrcamentoUseCase);
     await prisma.$executeRawUnsafe('SELECT 1');
   }
 
@@ -99,9 +102,9 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   }
 
   it('aprovação concorrente não duplica tentativa nem cobrança', async () => {
-    const dublê = await iniciarDublêOsReservas('sucesso');
+    const duble = await iniciarDubleOsReservas('sucesso');
     try {
-      await montarModulo(dublê.url);
+      await montarModulo(duble.url);
       const id = await criarOrcamento();
       const [a, b] = await Promise.allSettled([
         aprovar.execute(id),
@@ -111,16 +114,18 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
         r.status === 'fulfilled' ? r.value.statusHttp : 'erro',
       );
       expect(status.filter((s) => s === 200).length).toBe(1);
-      expect(await prisma.cobranca.count()).toBe(1);
+      expect(await prisma.cobranca.count({ where: { orcamentoId: id } })).toBe(
+        1,
+      );
       const orc = await prisma.orcamento.findUnique({ where: { id } });
       expect(orc?.tentativaAprovacao).toBe(1);
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 
   it('rollback integral se cobrança falhar na mesma transação', async () => {
-    const dublê = await iniciarDublêOsReservas('sucesso');
+    const duble = await iniciarDubleOsReservas('sucesso');
     try {
       const module = await Test.createTestingModule({
         imports: [
@@ -130,7 +135,7 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
               () => ({
                 OUTBOX_PUBLISHER_HABILITADO: 'false',
                 SQS_CONSUMER_HABILITADO: 'false',
-                OS_SERVICE_BASE_URL: dublê.url,
+                OS_SERVICE_BASE_URL: duble.url,
                 OS_SERVICE_TOKEN: 'token',
                 PRAZO_CARENCIA_MINUTOS: '2',
               }),
@@ -159,14 +164,14 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
       expect(orc?.situacao).toBe('APROVACAO_EM_ANDAMENTO');
       expect(await prisma.cobranca.count()).toBe(0);
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 
   it('processador recupera com a mesma Idempotency-Key', async () => {
-    const dublê = await iniciarDublêOsReservas('sucesso');
+    const duble = await iniciarDubleOsReservas('sucesso');
     try {
-      await montarModulo(dublê.url);
+      await montarModulo(duble.url);
       const id = await criarOrcamento();
       await prisma.orcamento.update({
         where: { id },
@@ -177,12 +182,12 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
         },
       });
       await aprovar.reprocessarPendente(id);
-      expect(dublê.chamadas[0]?.idempotencyKey).toBe(`reserva:${id}:1`);
+      expect(duble.chamadas[0]?.idempotencyKey).toBe(`reserva:${id}:1`);
       expect(
         (await prisma.orcamento.findUnique({ where: { id } }))?.situacao,
       ).toBe('APROVADO');
     } finally {
-      await encerrarDublê(dublê.servidor);
+      await encerrarDuble(duble.servidor);
     }
   });
 });

@@ -18,6 +18,16 @@ describe('Cobranca', () => {
     expect(cobranca.situacao).toBe(SituacaoCobranca.INTENCAO);
   });
 
+  it('atualiza link quando cobrança já está pendente', () => {
+    const cobranca = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENTE,
+      linkPagamento: 'https://antigo',
+    });
+    cobranca.marcarPendente('https://novo');
+    expect(cobranca.linkPagamento).toBe('https://novo');
+  });
+
   it('marca pendente com link', () => {
     const cobranca = new Cobranca(base);
     cobranca.marcarPendente('https://checkout');
@@ -78,5 +88,73 @@ describe('Cobranca', () => {
     });
     paga2.marcarPendenciaManual();
     expect(paga2.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+  });
+
+  it('rejeita transições inválidas de situação', () => {
+    const intencao = new Cobranca(base);
+    expect(() => intencao.marcarExpirada()).toThrow(
+      SituacaoCobrancaInvalidaError,
+    );
+
+    const paga = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PAGA,
+      pagamentoConfirmadoEm: new Date(),
+    });
+    paga.marcarEstornada();
+    expect(() => paga.iniciarEstorno()).toThrow(SituacaoCobrancaInvalidaError);
+
+    const cancelada = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.CANCELADA,
+    });
+    cancelada.marcarCancelada();
+
+    const pendente = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENTE,
+    });
+    pendente.marcarCancelada();
+    pendente.marcarCancelada();
+
+    const estorno = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.ESTORNO_EM_ANDAMENTO,
+    });
+    estorno.marcarEstornada();
+    estorno.marcarEstornada();
+
+    const pendencia = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENCIA_MANUAL,
+    });
+    pendencia.marcarPendenciaManual();
+  });
+
+  it('bloqueia e libera conciliação', () => {
+    const cobranca = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENTE,
+    });
+    const ate = new Date('2099-06-01T00:00:00.000Z');
+    cobranca.bloquearConciliacao(ate);
+    expect(cobranca.bloqueadoConciliacaoAte).toEqual(ate);
+    cobranca.liberarBloqueioConciliacao();
+    expect(cobranca.bloqueadoConciliacaoAte).toBeNull();
+  });
+
+  it('expira cobrança pendente e detecta prazo vencido', () => {
+    const pendente = new Cobranca({
+      ...base,
+      situacao: SituacaoCobranca.PENDENTE,
+      prazoPagamento: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    expect(pendente.prazoVencido(new Date('2021-01-01T00:00:00.000Z'))).toBe(
+      true,
+    );
+    pendente.marcarExpirada();
+    expect(pendente.situacao).toBe(SituacaoCobranca.EXPIRADA);
+    expect(pendente.linkPagamento).toBeNull();
+    pendente.marcarExpirada();
   });
 });

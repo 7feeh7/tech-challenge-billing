@@ -7,6 +7,7 @@ const rawBase = {
   ordemServicoId: 'os1',
   rodada: 1,
   correlationId: 'corr',
+  tipo: 'CANCELAMENTO_FINANCEIRO' as const,
   situacao: 'EM_ANDAMENTO' as const,
   chaveIdempotenciaMercadoPago: 'chave',
   resultadoExecucao: 'REPARO_NAO_INICIADO' as const,
@@ -111,6 +112,30 @@ describe('PrismaOperacaoFinanceiraGateway', () => {
     const gateway = new PrismaOperacaoFinanceiraGateway(prisma as never);
     const regs = await gateway.reivindicarEmAndamento(5, 10_000);
     expect(regs).toEqual([]);
+  });
+
+  it('criarConsulta grava consultaId e finalidade', async () => {
+    const create = jest.fn().mockResolvedValue({
+      ...rawBase,
+      tipo: 'CONSULTA_SITUACAO_FINANCEIRA',
+      consultaId: 'consulta-1',
+      finalidadeConsulta: 'EXCECAO_E10',
+      resultadoExecucao: null,
+    });
+    const clienteTx = { operacaoFinanceira: { create, findUnique: jest.fn() } };
+    const prisma = { operacaoFinanceira: clienteTx.operacaoFinanceira };
+    const gateway = new PrismaOperacaoFinanceiraGateway(prisma as never);
+    const ctx = new PrismaContextoTransacao(clienteTx as never);
+    const registro = await gateway.criarConsulta(ctx, {
+      eventId: 'ev2',
+      ordemServicoId: 'os1',
+      rodada: 1,
+      correlationId: 'corr',
+      consultaId: 'consulta-1',
+      finalidade: 'EXCECAO_E10',
+    });
+    expect(registro.consultaId).toBe('consulta-1');
+    expect(create).toHaveBeenCalled();
   });
 
   it('reivindicarEmAndamento bloqueia e retorna operações', async () => {

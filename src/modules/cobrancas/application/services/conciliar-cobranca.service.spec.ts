@@ -8,6 +8,13 @@ import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gatewa
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
 import { ConciliarCobrancaService } from './conciliar-cobranca.service';
 import type { ReemitirOrderMercadoPagoService } from './reemitir-order-mercado-pago.service';
+import type { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
+
+const criarPagamentoTardioStub = (): TratarPagamentoTardioService =>
+  ({
+    deveTratarPagamentoTardio: jest.fn().mockReturnValue(false),
+    tratar: jest.fn(),
+  }) as unknown as TratarPagamentoTardioService;
 
 describe('ConciliarCobrancaService', () => {
   const cobranca = new Cobranca({
@@ -31,6 +38,47 @@ describe('ConciliarCobrancaService', () => {
     checkoutUrl: 'https://checkout',
     ativa: true,
   };
+
+  it('pagamento após prazo dispara tratamento tardio em vez de confirmar', async () => {
+    const tardio = {
+      deveTratarPagamentoTardio: jest.fn().mockReturnValue(true),
+      tratar: jest.fn(),
+    };
+    const servico = new ConciliarCobrancaService(
+      new UnitOfWorkFake(),
+      {
+        buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        atualizar: jest.fn().mockImplementation(async (_ctx, _id, c) => c),
+      } as unknown as CobrancaGateway,
+      {
+        buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        atualizarSituacao: jest.fn(),
+      } as unknown as OrderMercadoPagoGateway,
+      {
+        consultarOrder: jest.fn().mockResolvedValue({
+          tipo: 'sucesso',
+          order: {
+            id: 'ORD1',
+            status: 'processed',
+            pagamentos: [
+              {
+                id: 'PAY1',
+                status: 'accredited',
+                dateApproved: '2099-06-02T00:00:00.000Z',
+              },
+            ],
+          },
+        }),
+      } as unknown as MercadoPagoGateway,
+      { registrarSeNova: jest.fn() } as unknown as TentativaRecusaGateway,
+      { registrar: jest.fn() } as OutboxGateway,
+      { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      tardio as unknown as TratarPagamentoTardioService,
+    );
+
+    await servico.conciliarPorCobrancaId('c1');
+    expect(tardio.tratar).toHaveBeenCalled();
+  });
 
   it('confirma pagamento só após consulta com pagamento accredited', async () => {
     const cobrancas: CobrancaGateway = {
@@ -73,6 +121,7 @@ describe('ConciliarCobrancaService', () => {
       { registrarSeNova: jest.fn() } as unknown as TentativaRecusaGateway,
       outbox,
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -120,6 +169,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       outbox,
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -169,6 +219,7 @@ describe('ConciliarCobrancaService', () => {
       tentativas as unknown as TentativaRecusaGateway,
       outbox,
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -231,6 +282,7 @@ describe('ConciliarCobrancaService', () => {
         }),
       },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -302,6 +354,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -319,6 +372,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     await servico.conciliarPorCobrancaId('c1');
   });
@@ -371,6 +425,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     await expect(
       servico.conciliarPorMercadoPagoOrderId('ORD-X'),
@@ -398,6 +453,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorMercadoPagoOrderId('ORD1');
@@ -420,6 +476,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -454,6 +511,7 @@ describe('ConciliarCobrancaService', () => {
         }),
       },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');
@@ -495,6 +553,7 @@ describe('ConciliarCobrancaService', () => {
       {} as TentativaRecusaGateway,
       { registrar: jest.fn() },
       { executar: jest.fn() } as unknown as ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
 
     await servico.conciliarPorCobrancaId('c1');

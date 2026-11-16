@@ -8,6 +8,12 @@ export const EVENTO_RESPOSTA_CANCELAMENTO =
   'billing.resposta-cancelamento-financeiro.v1';
 export const EVENTO_PENDENCIA_RESOLVIDA = 'billing.pendencia-resolvida.v1';
 export const EVENTO_ESTORNO_CONCLUIDO = 'billing.estorno-concluido.v1';
+export const EVENTO_COBRANCA_EXPIRADA = 'billing.cobranca-expirada.v1';
+export const EVENTO_PAGAMENTO_TARDIO_REGISTRADO =
+  'billing.pagamento-tardio-registrado.v1';
+export const EVENTO_CONSULTAR_SITUACAO_FINANCEIRA =
+  'billing.consultar-situacao-financeira.v1';
+export const EVENTO_SITUACAO_FINANCEIRA = 'billing.situacao-financeira.v1';
 
 export const DESTINO_FILA_OS = 'os-in';
 
@@ -92,4 +98,49 @@ export interface PayloadEstornoConcluido {
   estornadoEm: string;
   tipoEstorno: 'INTEGRAL' | 'PARCIAL';
   statusOrderMercadoPago: string;
+}
+
+export type FinalidadeConsultaSituacaoFinanceira =
+  | 'PRAZO_DE_REFERENCIA_VENCIDO'
+  | 'EXCECAO_E10';
+
+export interface PayloadConsultarSituacaoFinanceira {
+  consultaId: string;
+  finalidade: FinalidadeConsultaSituacaoFinanceira;
+}
+
+export type SituacaoPagamentoConsulta =
+  | 'PAGO_NO_PRAZO'
+  | 'SEM_PAGAMENTO'
+  | 'INDETERMINADA';
+
+export type SituacaoEstornoConsulta =
+  | 'NENHUM'
+  | 'EM_ANDAMENTO'
+  | 'REALIZADO'
+  | 'INDETERMINADO';
+
+export interface PayloadSituacaoFinanceira {
+  consultaId: string;
+  situacaoPagamento: SituacaoPagamentoConsulta;
+  situacaoEstorno: SituacaoEstornoConsulta;
+  cobrancaId: string;
+  orderId?: string;
+  aprovadoEm?: string;
+  valorCentavos?: number;
+}
+
+export interface PayloadCobrancaExpirada {
+  cobrancaId: string;
+  expiradaEm: string;
+  orderId: string;
+  statusOrderMercadoPago: string;
+  statusDetailMercadoPago: string;
+}
+
+export interface PayloadPagamentoTardioRegistrado {
+  cobrancaId: string;
+  orderId: string;
+  aprovadoEm: string;
+  tratamento: 'ESTORNO_AUTOMATICO';
 }

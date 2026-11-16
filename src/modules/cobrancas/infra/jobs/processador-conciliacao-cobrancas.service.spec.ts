@@ -10,8 +10,10 @@ describe('ProcessadorConciliacaoCobrancasService', () => {
     };
     const config = {
       get: (chave: string) => {
-        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO') return 'true';
-        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_INTERVAL_MS') return '60000';
+        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO')
+          return 'true';
+        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_INTERVAL_MS')
+          return '60000';
         if (chave === 'COBRANCA_REIVINDICACAO_MS') return '30000';
         if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_LOTE') return '10';
         return undefined;
@@ -29,8 +31,10 @@ describe('ProcessadorConciliacaoCobrancasService', () => {
   it('inicia intervalo quando habilitado', () => {
     const config = {
       get: (chave: string) => {
-        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO') return 'true';
-        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_INTERVAL_MS') return '60000';
+        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO')
+          return 'true';
+        if (chave === 'COBRANCA_CONCILIACAO_PROCESSADOR_INTERVAL_MS')
+          return '60000';
         return '30000';
       },
     };

@@ -10,6 +10,14 @@ import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gatewa
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
 import { ProcessarNotificacaoMercadoPagoUseCase } from '../use-cases/processar-notificacao-mercado-pago.use-case';
 import { ConciliarCobrancaService } from './conciliar-cobranca.service';
+import type { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
+
+const criarPagamentoTardioStub = (): TratarPagamentoTardioService =>
+  ({
+    deveTratarPagamentoTardio: jest.fn().mockReturnValue(false),
+    tratar: jest.fn(),
+  }) as unknown as TratarPagamentoTardioService;
+
 import { CriarOrderMercadoPagoService } from './criar-order-mercado-pago.service';
 
 describe('Consistência financeira — cobrança (E17)', () => {
@@ -240,6 +248,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     await conciliar.conciliarPorCobrancaId('c1');
@@ -281,6 +290,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     const caso = new ProcessarNotificacaoMercadoPagoUseCase(
       new UnitOfWorkFake(),
@@ -358,6 +368,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(tentativas.registrarSeNova).toHaveBeenCalled();
@@ -414,6 +425,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
+      criarPagamentoTardioStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalledTimes(1);

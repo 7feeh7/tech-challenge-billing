@@ -8,7 +8,6 @@ import type {
   FiltroListarCobrancas,
 } from '../../application/ports/cobranca.gateway';
 import type { Cobranca } from '../../domain/entities/cobranca.entity';
-import { SituacaoCobranca } from '../../domain/situacao-cobranca';
 import { PrismaCobrancaMapper } from './prisma-cobranca.mapper';
 
 @Injectable()
@@ -147,6 +146,38 @@ export class PrismaCobrancaGateway implements CobrancaGateway {
       const pendentes = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM cobrancas
         WHERE situacao = 'PENDENTE'
+          AND (bloqueado_conciliacao_ate IS NULL OR bloqueado_conciliacao_ate < ${agora})
+        ORDER BY criado_em
+        LIMIT ${limite}
+        FOR UPDATE SKIP LOCKED`;
+
+      if (pendentes.length === 0) return [];
+
+      await tx.cobranca.updateMany({
+        where: { id: { in: pendentes.map((p) => p.id) } },
+        data: { bloqueadoConciliacaoAte: bloqueadoAte },
+      });
+
+      return tx.cobranca.findMany({
+        where: { id: { in: pendentes.map((p) => p.id) } },
+      });
+    });
+
+    return rows.map((r) => PrismaCobrancaMapper.toDomain(r));
+  }
+
+  async reivindicarPendentesExpiracao(
+    limite: number,
+    posseMs: number,
+  ): Promise<Cobranca[]> {
+    const agora = new Date();
+    const bloqueadoAte = new Date(agora.getTime() + posseMs);
+
+    const rows = await this.prisma.$transaction(async (tx) => {
+      const pendentes = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM cobrancas
+        WHERE situacao = 'PENDENTE'
+          AND prazo_pagamento < ${agora}
           AND (bloqueado_conciliacao_ate IS NULL OR bloqueado_conciliacao_ate < ${agora})
         ORDER BY criado_em
         LIMIT ${limite}

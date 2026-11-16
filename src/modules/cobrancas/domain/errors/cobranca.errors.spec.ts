@@ -1,5 +1,8 @@
-import { CobrancaNaoEncontradaError, SituacaoCobrancaInvalidaError } from './cobranca.errors';
 import { SituacaoCobranca } from '../situacao-cobranca';
+import {
+  CobrancaNaoEncontradaError,
+  SituacaoCobrancaInvalidaError,
+} from './cobranca.errors';
 
 describe('cobranca.errors', () => {
   it('expõe mensagens de domínio', () => {

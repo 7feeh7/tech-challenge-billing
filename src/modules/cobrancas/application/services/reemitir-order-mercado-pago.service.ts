@@ -67,6 +67,8 @@ export class ReemitirOrderMercadoPagoService {
 
     if (!chave) return;
 
+    if (await this.orders.buscarAtivaPorCobrancaId(cobrancaId)) return;
+
     const ultimaOrder = await this.orders.buscarUltimaPorCobrancaId(cobrancaId);
     if (ultimaOrder?.mercadoPagoOrderId) {
       const consulta = await this.mercadoPago.consultarOrder(

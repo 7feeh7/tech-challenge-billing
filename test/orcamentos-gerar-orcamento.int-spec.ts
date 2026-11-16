@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { ProcessarGerarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/processar-gerar-orcamento.use-case';
 import { OrcamentosModule } from '../src/modules/orcamentos/orcamentos.module';
 import { PrismaModule } from '../src/shared/database/prisma.module';
@@ -12,8 +12,10 @@ import {
   exigirDatabaseUrl,
   verificarConexaoPostgres,
 } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Gerar orçamento (integração PostgreSQL)', () => {
+  let nestModule: TestingModule;
   let prisma: PrismaService;
   let processar: ProcessarGerarOrcamentoUseCase;
 
@@ -30,7 +32,7 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
   beforeAll(async () => {
     exigirDatabaseUrl();
 
-    const module = await Test.createTestingModule({
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -47,14 +49,14 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
       ],
     }).compile();
 
-    prisma = module.get(PrismaService);
-    processar = module.get(ProcessarGerarOrcamentoUseCase);
+    prisma = nestModule.get(PrismaService);
+    processar = nestModule.get(ProcessarGerarOrcamentoUseCase);
 
     await verificarConexaoPostgres(() => prisma.$queryRaw`SELECT 1`);
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
+    await fecharModuloIntegracao(nestModule);
   });
 
   beforeEach(async () => {

@@ -24,13 +24,16 @@ import {
 } from './application/ports/tokens';
 import { ConciliarCobrancaService } from './application/services/conciliar-cobranca.service';
 import { CriarOrderMercadoPagoService } from './application/services/criar-order-mercado-pago.service';
+import { ExpirarCobrancaService } from './application/services/expirar-cobranca.service';
 import { ReemitirOrderMercadoPagoService } from './application/services/reemitir-order-mercado-pago.service';
+import { TratarPagamentoTardioService } from './application/services/tratar-pagamento-tardio.service';
 import { ListarCobrancasUseCase } from './application/use-cases/listar-cobrancas.use-case';
 import { ProcessarNotificacaoMercadoPagoUseCase } from './application/use-cases/processar-notificacao-mercado-pago.use-case';
 import { CobrancasController } from './infra/http/controllers/cobrancas.controller';
 import { FetchMercadoPagoGateway } from './infra/http/fetch-mercado-pago.gateway';
 import { ProcessadorCobrancasIntencaoService } from './infra/jobs/processador-cobrancas-intencao.service';
 import { ProcessadorConciliacaoCobrancasService } from './infra/jobs/processador-conciliacao-cobrancas.service';
+import { ProcessadorExpiracaoCobrancasService } from './infra/jobs/processador-expiracao-cobrancas.service';
 import { PrismaAvisoWebhookGateway } from './infra/persistence/prisma-aviso-webhook.gateway';
 import { PrismaCobrancaGateway } from './infra/persistence/prisma-cobranca.gateway';
 import { PrismaOperacaoCriacaoOrderGateway } from './infra/persistence/prisma-operacao-criacao-order.gateway';
@@ -131,6 +134,50 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
       ],
     },
     {
+      provide: TratarPagamentoTardioService,
+      useFactory: (
+        uow: UnitOfWork,
+        cobrancas: CobrancaGateway,
+        orders: OrderMercadoPagoGateway,
+        mp: MercadoPagoGateway,
+        outbox: OutboxGateway,
+      ) => new TratarPagamentoTardioService(uow, cobrancas, orders, mp, outbox),
+      inject: [
+        UNIT_OF_WORK,
+        COBRANCA_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+      ],
+    },
+    {
+      provide: ExpirarCobrancaService,
+      useFactory: (
+        uow: UnitOfWork,
+        cobrancas: CobrancaGateway,
+        orders: OrderMercadoPagoGateway,
+        mp: MercadoPagoGateway,
+        outbox: OutboxGateway,
+        pagamentoTardio: TratarPagamentoTardioService,
+      ) =>
+        new ExpirarCobrancaService(
+          uow,
+          cobrancas,
+          orders,
+          mp,
+          outbox,
+          pagamentoTardio,
+        ),
+      inject: [
+        UNIT_OF_WORK,
+        COBRANCA_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+        TratarPagamentoTardioService,
+      ],
+    },
+    {
       provide: ConciliarCobrancaService,
       useFactory: (
         uow: UnitOfWork,
@@ -140,6 +187,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         tentativas: TentativaRecusaGateway,
         outbox: OutboxGateway,
         reemitir: ReemitirOrderMercadoPagoService,
+        pagamentoTardio: TratarPagamentoTardioService,
       ) =>
         new ConciliarCobrancaService(
           uow,
@@ -149,6 +197,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
           tentativas,
           outbox,
           reemitir,
+          pagamentoTardio,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -158,6 +207,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         TENTATIVA_RECUSA_GATEWAY,
         OUTBOX_GATEWAY,
         ReemitirOrderMercadoPagoService,
+        TratarPagamentoTardioService,
       ],
     },
     {
@@ -189,6 +239,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
     },
     ProcessadorCobrancasIntencaoService,
     ProcessadorConciliacaoCobrancasService,
+    ProcessadorExpiracaoCobrancasService,
   ],
   exports: [
     COBRANCA_GATEWAY,

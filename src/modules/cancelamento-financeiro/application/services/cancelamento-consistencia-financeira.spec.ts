@@ -1,5 +1,5 @@
 /**
- * Consolida cenários de consistência financeira da E18 (dublês MP; sem E04/E05).
+ * Consolida cenários de consistência financeira da E18 (dubles MP; sem E04/E05).
  */
 
 import { Cobranca } from '@/modules/cobrancas/domain/entities/cobranca.entity';
@@ -29,6 +29,7 @@ describe('Consistência financeira E18 (cancelamento)', () => {
     ordemServicoId: 'os1',
     rodada: 1,
     correlationId: 'corr',
+    tipo: 'CANCELAMENTO_FINANCEIRO' as const,
     situacao: 'EM_ANDAMENTO' as const,
     chaveIdempotenciaMercadoPago: 'chave-fixa',
     resultadoExecucao: 'REPARO_NAO_INICIADO' as const,

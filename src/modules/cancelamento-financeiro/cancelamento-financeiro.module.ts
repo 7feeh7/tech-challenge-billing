@@ -22,15 +22,23 @@ import {
   MENSAGEM_PROCESSADA_GATEWAY,
   OUTBOX_GATEWAY,
 } from '@/shared/messaging/application/ports/tokens';
-import { PROCESSADOR_CANCELAR_FINANCEIRO } from '@/shared/messaging/infra/consumo/consumidor-fila-billing.service';
+import {
+  PROCESSADOR_CANCELAR_FINANCEIRO,
+  PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO,
+} from '@/shared/messaging/infra/consumo/consumidor-fila-billing.service';
 import { MensageriaModule } from '@/shared/messaging/mensageria.module';
+import { ObservabilityModule } from '@/shared/observability/observability.module';
+import type { PendenciaFinanceiraMonitorGateway } from '@/shared/observability/pendencia-financeira-monitor.gateway';
+import { PENDENCIA_FINANCEIRA_MONITOR_GATEWAY } from '@/shared/observability/tokens';
 import {
   BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
   OPERACAO_FINANCEIRA_GATEWAY,
   PENDENCIA_ESTORNO_GATEWAY,
 } from './application/ports/tokens';
 import { ExecutarCancelamentoFinanceiroService } from './application/services/executar-cancelamento-financeiro.service';
+import { ExecutarConsultaSituacaoFinanceiroService } from './application/services/executar-consulta-situacao-financeiro.service';
 import { ProcessarCancelarFinanceiroUseCase } from './application/use-cases/processar-cancelar-financeiro.use-case';
+import { ProcessarConsultarSituacaoFinanceiroUseCase } from './application/use-cases/processar-consultar-situacao-financeiro.use-case';
 import { ResolverPendenciaEstornoUseCase } from './application/use-cases/resolver-pendencia-estorno.use-case';
 import { PendenciasEstornoController } from './infra/http/controllers/pendencias-estorno.controller';
 import { ProcessadorOperacoesFinanceirasService } from './infra/jobs/processador-operacoes-financeiras.service';
@@ -39,7 +47,11 @@ import { PrismaOperacaoFinanceiraGateway } from './infra/persistence/prisma-oper
 import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-pendencia-estorno.gateway';
 
 @Module({
-  imports: [MensageriaModule, forwardRef(() => CobrancasModule)],
+  imports: [
+    MensageriaModule,
+    ObservabilityModule,
+    forwardRef(() => CobrancasModule),
+  ],
   controllers: [PendenciasEstornoController],
   providers: [
     PrismaBloqueioCriacaoCobrancaGateway,
@@ -83,6 +95,28 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
     {
       provide: PROCESSADOR_CANCELAR_FINANCEIRO,
       useExisting: ProcessarCancelarFinanceiroUseCase,
+    },
+    {
+      provide: ProcessarConsultarSituacaoFinanceiroUseCase,
+      useFactory: (
+        uow: UnitOfWork,
+        operacoes: PrismaOperacaoFinanceiraGateway,
+        mensagens: MensagemProcessadaGateway,
+      ) =>
+        new ProcessarConsultarSituacaoFinanceiroUseCase(
+          uow,
+          operacoes,
+          mensagens,
+        ),
+      inject: [
+        UNIT_OF_WORK,
+        OPERACAO_FINANCEIRA_GATEWAY,
+        MENSAGEM_PROCESSADA_GATEWAY,
+      ],
+    },
+    {
+      provide: PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO,
+      useExisting: ProcessarConsultarSituacaoFinanceiroUseCase,
     },
     {
       provide: ExecutarCancelamentoFinanceiroService,
@@ -135,6 +169,46 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
       ],
     },
     {
+      provide: ExecutarConsultaSituacaoFinanceiroService,
+      useFactory: (
+        uow: UnitOfWork,
+        operacoes: PrismaOperacaoFinanceiraGateway,
+        cobrancas: CobrancaGateway,
+        orders: OrderMercadoPagoGateway,
+        mp: MercadoPagoGateway,
+        outbox: OutboxGateway,
+        monitor: PendenciaFinanceiraMonitorGateway,
+        config: ConfigService,
+      ) =>
+        new ExecutarConsultaSituacaoFinanceiroService(
+          uow,
+          operacoes,
+          cobrancas,
+          orders,
+          mp,
+          outbox,
+          monitor,
+          Number(
+            config.get<string>('CANCELAMENTO_FINANCEIRO_MAX_TENTATIVAS_MP') ??
+              '5',
+          ),
+          Number(
+            config.get<string>('CANCELAMENTO_FINANCEIRO_RETRY_MP_MS') ??
+              '30000',
+          ),
+        ),
+      inject: [
+        UNIT_OF_WORK,
+        OPERACAO_FINANCEIRA_GATEWAY,
+        COBRANCA_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+        PENDENCIA_FINANCEIRA_MONITOR_GATEWAY,
+        ConfigService,
+      ],
+    },
+    {
       provide: ResolverPendenciaEstornoUseCase,
       useFactory: (
         uow: UnitOfWork,
@@ -163,7 +237,9 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
   exports: [
     BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
     PROCESSADOR_CANCELAR_FINANCEIRO,
+    PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO,
     ProcessarCancelarFinanceiroUseCase,
+    ProcessarConsultarSituacaoFinanceiroUseCase,
   ],
 })
 export class CancelamentoFinanceiroModule {}

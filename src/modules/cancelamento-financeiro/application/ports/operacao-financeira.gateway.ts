@@ -1,6 +1,14 @@
 import type { ContextoTransacao } from '@/shared/database/unit-of-work.port';
+import type {
+  FinalidadeConsultaSituacaoFinanceira,
+  SituacaoPagamentoConsulta,
+} from '@/shared/messaging/envelope';
 
 export type SituacaoOperacaoFinanceiraRegistro = 'EM_ANDAMENTO' | 'CONCLUIDA';
+
+export type TipoOperacaoFinanceiraRegistro =
+  | 'CANCELAMENTO_FINANCEIRO'
+  | 'CONSULTA_SITUACAO_FINANCEIRA';
 
 export type ResultadoCancelamentoFinanceiroRegistro =
   | 'NADA_A_CANCELAR'
@@ -14,11 +22,15 @@ export interface OperacaoFinanceiraRegistro {
   ordemServicoId: string;
   rodada: number;
   correlationId: string;
+  tipo: TipoOperacaoFinanceiraRegistro;
   situacao: SituacaoOperacaoFinanceiraRegistro;
   chaveIdempotenciaMercadoPago: string;
-  resultadoExecucao: 'REPARO_NAO_INICIADO' | 'REPARO_INICIADO';
+  resultadoExecucao?: 'REPARO_NAO_INICIADO' | 'REPARO_INICIADO' | null;
   motivoCancelamento?: string | null;
   etapaOrigem?: string | null;
+  consultaId?: string | null;
+  finalidadeConsulta?: FinalidadeConsultaSituacaoFinanceira | null;
+  resultadoConsulta?: SituacaoPagamentoConsulta | null;
   cobrancaId?: string | null;
   resultado?: ResultadoCancelamentoFinanceiroRegistro | null;
   pendenciaId?: string | null;
@@ -37,15 +49,32 @@ export interface CriarOperacaoFinanceiraInput {
   etapaOrigem?: string | null;
 }
 
+export interface CriarConsultaSituacaoFinanceiraInput {
+  eventId: string;
+  ordemServicoId: string;
+  rodada: number;
+  correlationId: string;
+  consultaId: string;
+  finalidade: FinalidadeConsultaSituacaoFinanceira;
+}
+
 export interface OperacaoFinanceiraGateway {
   buscarPorId(id: string): Promise<OperacaoFinanceiraRegistro | null>;
   buscarPorEventId(
     contexto: ContextoTransacao,
     eventId: string,
   ): Promise<OperacaoFinanceiraRegistro | null>;
+  buscarPorConsultaId(
+    contexto: ContextoTransacao,
+    consultaId: string,
+  ): Promise<OperacaoFinanceiraRegistro | null>;
   criar(
     contexto: ContextoTransacao,
     input: CriarOperacaoFinanceiraInput,
+  ): Promise<OperacaoFinanceiraRegistro>;
+  criarConsulta(
+    contexto: ContextoTransacao,
+    input: CriarConsultaSituacaoFinanceiraInput,
   ): Promise<OperacaoFinanceiraRegistro>;
   concluir(
     contexto: ContextoTransacao,
@@ -54,6 +83,14 @@ export interface OperacaoFinanceiraGateway {
       cobrancaId?: string | null;
       resultado: ResultadoCancelamentoFinanceiroRegistro;
       pendenciaId?: string | null;
+    },
+  ): Promise<void>;
+  concluirConsulta(
+    contexto: ContextoTransacao,
+    id: string,
+    dados: {
+      cobrancaId?: string | null;
+      resultadoConsulta: SituacaoPagamentoConsulta;
     },
   ): Promise<void>;
   adiarProcessamento(id: string, ate: Date): Promise<void>;

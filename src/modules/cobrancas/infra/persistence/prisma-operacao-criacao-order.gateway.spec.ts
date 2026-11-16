@@ -58,12 +58,7 @@ describe('PrismaOperacaoCriacaoOrderGateway', () => {
   it('reinicia operação com nova chave', async () => {
     const clienteTx = {
       operacaoCriacaoOrder: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'op1',
-          cobrancaId: 'c1',
-          chaveIdempotencia: 'k-antiga',
-          situacao: 'CONCLUIDA',
-        }),
+        findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue({
           id: 'op1',
           cobrancaId: 'c1',
@@ -73,6 +68,12 @@ describe('PrismaOperacaoCriacaoOrderGateway', () => {
         upsert: jest.fn(),
         create: jest.fn(),
       },
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          chave_idempotencia: 'k-antiga',
+          situacao: 'CONCLUIDA',
+        },
+      ]),
     };
     const prisma = { operacaoCriacaoOrder: clienteTx.operacaoCriacaoOrder };
     const gateway = new PrismaOperacaoCriacaoOrderGateway(prisma as never);
@@ -81,5 +82,26 @@ describe('PrismaOperacaoCriacaoOrderGateway', () => {
     const chave = await gateway.garantirReemissaoEmAndamento(contexto, 'c1');
     expect(chave).toBeDefined();
     expect(clienteTx.operacaoCriacaoOrder.update).toHaveBeenCalled();
+  });
+
+  it('reutiliza chave quando reemissão já está em andamento', async () => {
+    const clienteTx = {
+      operacaoCriacaoOrder: {
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          chave_idempotencia: 'chave-em-andamento',
+          situacao: 'EM_ANDAMENTO',
+        },
+      ]),
+    };
+    const prisma = { operacaoCriacaoOrder: clienteTx.operacaoCriacaoOrder };
+    const gateway = new PrismaOperacaoCriacaoOrderGateway(prisma as never);
+    const contexto = new PrismaContextoTransacao(clienteTx as never);
+    const chave = await gateway.garantirReemissaoEmAndamento(contexto, 'c1');
+    expect(chave).toBe('chave-em-andamento');
+    expect(clienteTx.operacaoCriacaoOrder.update).not.toHaveBeenCalled();
   });
 });

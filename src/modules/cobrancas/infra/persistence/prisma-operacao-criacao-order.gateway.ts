@@ -69,12 +69,21 @@ export class PrismaOperacaoCriacaoOrderGateway
     cobrancaId: string,
   ): Promise<string> {
     const cliente = obterClienteTransacao(contexto, this.prisma);
-    const existente = await cliente.operacaoCriacaoOrder.findUnique({
-      where: { cobrancaId },
-    });
+    const bloqueados = await cliente.$queryRaw<
+      {
+        chave_idempotencia: string;
+        situacao: string;
+      }[]
+    >`
+      SELECT chave_idempotencia, situacao
+      FROM operacoes_criacao_order
+      WHERE cobranca_id = ${cobrancaId}::uuid
+      FOR UPDATE`;
+
+    const existente = bloqueados[0];
 
     if (existente?.situacao === 'EM_ANDAMENTO') {
-      return existente.chaveIdempotencia;
+      return existente.chave_idempotencia;
     }
 
     const novaChave = randomUUID();

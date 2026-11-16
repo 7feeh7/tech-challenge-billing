@@ -54,6 +54,50 @@ describe('PrismaCobrancaGateway', () => {
     await expect(gateway.buscarPorOrcamentoId('o1')).resolves.toBeNull();
   });
 
+  it('busca cobrança por ordem de serviço e rodada', async () => {
+    const row = {
+      id: 'c1',
+      orcamentoId: 'o1',
+      ordemServicoId: 'os1',
+      rodada: 2,
+      clienteId: 'cl',
+      correlationId: 'corr',
+      valorTotalCentavos: 10,
+      prazoPagamento: new Date(),
+      situacao: SituacaoCobranca.PENDENTE,
+    };
+    const prisma = {
+      cobranca: {
+        findFirst: jest.fn().mockResolvedValue(row),
+        findUnique: jest.fn(),
+      },
+      $transaction: jest.fn(),
+      orderMercadoPago: { findUnique: jest.fn() },
+    };
+    const gateway = new PrismaCobrancaGateway(prisma as never);
+    jest.spyOn(PrismaCobrancaMapper, 'toDomain').mockReturnValue(
+      new Cobranca({
+        ...row,
+        prazoPagamento: row.prazoPagamento,
+      }),
+    );
+    const encontrada = await gateway.buscarPorOrdemServicoERodada('os1', 2);
+    expect(encontrada?.rodada).toBe(2);
+    expect(prisma.cobranca.findFirst).toHaveBeenCalled();
+  });
+
+  it('retorna nulo quando não há cobrança para OS e rodada', async () => {
+    const prisma = {
+      cobranca: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn(),
+      orderMercadoPago: { findUnique: jest.fn() },
+    };
+    const gateway = new PrismaCobrancaGateway(prisma as never);
+    await expect(
+      gateway.buscarPorOrdemServicoERodada('os1', 1),
+    ).resolves.toBeNull();
+  });
+
   it('lista cobranças com filtro', async () => {
     const row = {
       id: 'c1',
@@ -160,6 +204,59 @@ describe('PrismaCobrancaGateway', () => {
     const gateway = new PrismaCobrancaGateway(prisma as never);
     const pendentes = await gateway.reivindicarPendentesConciliacao(5, 1000);
     expect(pendentes[0]?.situacao).toBe(SituacaoCobranca.PENDENTE);
+  });
+
+  it('reivindica cobranças pendentes com prazo vencido', async () => {
+    const row = {
+      id: 'c1',
+      orcamentoId: 'o1',
+      ordemServicoId: 'os1',
+      rodada: 1,
+      clienteId: 'cl',
+      correlationId: 'corr',
+      valorTotalCentavos: 10,
+      prazoPagamento: new Date('2020-01-01'),
+      situacao: SituacaoCobranca.PENDENTE,
+    };
+    const prisma = {
+      cobranca: { updateMany: jest.fn(), findMany: jest.fn() },
+      $transaction: jest.fn(async (fn) =>
+        fn({
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'c1' }]),
+          cobranca: {
+            updateMany: jest.fn(),
+            findMany: jest.fn().mockResolvedValue([row]),
+          },
+        }),
+      ),
+      orderMercadoPago: { findUnique: jest.fn() },
+    };
+    const gateway = new PrismaCobrancaGateway(prisma as never);
+    jest.spyOn(PrismaCobrancaMapper, 'toDomain').mockReturnValue(
+      new Cobranca({
+        ...row,
+        prazoPagamento: row.prazoPagamento,
+      }),
+    );
+    const pendentes = await gateway.reivindicarPendentesExpiracao(5, 1000);
+    expect(pendentes[0]?.situacao).toBe(SituacaoCobranca.PENDENTE);
+  });
+
+  it('expiração reivindicada retorna vazio sem candidatas', async () => {
+    const prisma = {
+      cobranca: { updateMany: jest.fn(), findMany: jest.fn() },
+      $transaction: jest.fn(async (fn) =>
+        fn({
+          $queryRaw: jest.fn().mockResolvedValue([]),
+          cobranca: { updateMany: jest.fn(), findMany: jest.fn() },
+        }),
+      ),
+      orderMercadoPago: { findUnique: jest.fn() },
+    };
+    const gateway = new PrismaCobrancaGateway(prisma as never);
+    await expect(
+      gateway.reivindicarPendentesExpiracao(5, 1000),
+    ).resolves.toEqual([]);
   });
 
   it('retorna vazio quando nenhuma cobrança reivindicada', async () => {
