@@ -57,7 +57,11 @@ export class ExecutarCancelamentoFinanceiroService {
 
   async executar(operacaoId: string): Promise<void> {
     const operacao = await this.operacoes.buscarPorId(operacaoId);
-    if (!operacao || operacao.situacao !== 'EM_ANDAMENTO') {
+    if (
+      !operacao ||
+      operacao.situacao !== 'EM_ANDAMENTO' ||
+      operacao.tipo !== 'CANCELAMENTO_FINANCEIRO'
+    ) {
       return;
     }
 

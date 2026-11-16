@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { AprovarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/aprovar-orcamento.use-case';
 import { ProcessarGerarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/processar-gerar-orcamento.use-case';
 import { EstoqueInsuficienteAprovacaoError } from '../src/modules/orcamentos/domain/errors/orcamento.errors';
@@ -15,8 +15,10 @@ import {
   iniciarDublêOsReservas,
 } from './helpers/dublê-os-reservas';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Orçamentos — aprovação com reserva (integração)', () => {
+  let nestModule: TestingModule | undefined;
   let prisma: PrismaService;
   let processar: ProcessarGerarOrcamentoUseCase;
   let aprovar: AprovarOrcamentoUseCase;
@@ -36,7 +38,7 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
+    await fecharModuloIntegracao(nestModule);
   });
 
   beforeEach(async () => {
@@ -50,7 +52,8 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   });
 
   async function montarModulo(osUrl: string, timeoutMs: string) {
-    const module = await Test.createTestingModule({
+    await fecharModuloIntegracao(nestModule);
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -72,9 +75,9 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
       ],
     }).compile();
 
-    prisma = module.get(PrismaService);
-    processar = module.get(ProcessarGerarOrcamentoUseCase);
-    aprovar = module.get(AprovarOrcamentoUseCase);
+    prisma = nestModule.get(PrismaService);
+    processar = nestModule.get(ProcessarGerarOrcamentoUseCase);
+    aprovar = nestModule.get(AprovarOrcamentoUseCase);
   }
 
   async function criarOrcamento() {

@@ -64,6 +64,7 @@ describe('Cancelamento financeiro (integração)', () => {
               COBRANCA_CRIACAO_PROCESSADOR_HABILITADO: 'false',
               COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO: 'false',
               CANCELAMENTO_FINANCEIRO_PROCESSADOR_HABILITADO: 'false',
+              COBRANCA_EXPIRACAO_PROCESSADOR_HABILITADO: 'false',
               APROVACAO_PROCESSADOR_HABILITADO: 'false',
             }),
           ],
@@ -99,7 +100,6 @@ describe('Cancelamento financeiro (integração)', () => {
 
   afterAll(async () => {
     await nestModule?.close();
-    await prisma?.$disconnect();
   });
 
   it('fase 1 cria bloqueio e operação; fase 2 cancela cobrança pendente', async () => {

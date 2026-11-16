@@ -58,7 +58,9 @@ describe('interpretarSituacaoFinanceira', () => {
       status: 'created',
       pagamentos: [],
     };
-    expect(interpretarSituacaoFinanceira(order).tipo).toBe('aguardando_pagamento');
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe(
+      'aguardando_pagamento',
+    );
   });
 
   it('classifica situação não mapeada como indeterminada', () => {
@@ -68,6 +70,47 @@ describe('interpretarSituacaoFinanceira', () => {
       pagamentos: [],
     };
     expect(interpretarSituacaoFinanceira(order).tipo).toBe('indeterminada');
+  });
+
+  it('considera paga com status approved sem dateApproved', () => {
+    const order: OrderMercadoPagoConsultada = {
+      id: 'ORD1',
+      status: 'processed',
+      pagamentos: [{ id: 'PAY1', status: 'approved' }],
+    };
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe('paga');
+  });
+
+  it('registra recusa com order processed e pagamento failed', () => {
+    const order: OrderMercadoPagoConsultada = {
+      id: 'ORD1',
+      status: 'processed',
+      pagamentos: [
+        { id: 'PAY1', status: 'failed', statusDetail: 'cc_rejected' },
+      ],
+    };
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe('recusada');
+  });
+
+  it('encerra order com status expired', () => {
+    const order: OrderMercadoPagoConsultada = {
+      id: 'ORD1',
+      status: 'expired',
+      pagamentos: [],
+    };
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe(
+      'encerrada_sem_pagamento',
+    );
+  });
+
+  it('aguarda pagamento quando status ausente', () => {
+    const order: OrderMercadoPagoConsultada = {
+      id: 'ORD1',
+      pagamentos: [],
+    };
+    expect(interpretarSituacaoFinanceira(order).tipo).toBe(
+      'aguardando_pagamento',
+    );
   });
 
   it('identifica order encerrada sem pagamento', () => {

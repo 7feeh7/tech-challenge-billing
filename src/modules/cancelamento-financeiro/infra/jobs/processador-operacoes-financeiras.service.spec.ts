@@ -2,11 +2,13 @@ import { ProcessadorOperacoesFinanceirasService } from './processador-operacoes-
 
 describe('ProcessadorOperacoesFinanceirasService', () => {
   it('processa operações reivindicadas', async () => {
-    const executar = { executar: jest.fn() };
+    const executarCancelamento = { executar: jest.fn() };
+    const executarConsulta = { executar: jest.fn() };
     const operacoes = {
-      reivindicarEmAndamento: jest
-        .fn()
-        .mockResolvedValue([{ id: 'op1' }, { id: 'op2' }]),
+      reivindicarEmAndamento: jest.fn().mockResolvedValue([
+        { id: 'op1', tipo: 'CANCELAMENTO_FINANCEIRO' },
+        { id: 'op2', tipo: 'CONSULTA_SITUACAO_FINANCEIRA' },
+      ]),
     };
     const config = {
       get: (chave: string) => {
@@ -20,15 +22,18 @@ describe('ProcessadorOperacoesFinanceirasService', () => {
     };
     const servico = new ProcessadorOperacoesFinanceirasService(
       config as never,
-      executar as never,
+      executarCancelamento as never,
+      executarConsulta as never,
       operacoes as never,
     );
     await servico.processarLote();
-    expect(executar.executar).toHaveBeenCalledTimes(2);
+    expect(executarCancelamento.executar).toHaveBeenCalledTimes(1);
+    expect(executarConsulta.executar).toHaveBeenCalledTimes(1);
   });
 
   it('não processa quando desabilitado', async () => {
-    const executar = { executar: jest.fn() };
+    const executarCancelamento = { executar: jest.fn() };
+    const executarConsulta = { executar: jest.fn() };
     const operacoes = {
       reivindicarEmAndamento: jest.fn().mockResolvedValue([]),
     };
@@ -41,15 +46,38 @@ describe('ProcessadorOperacoesFinanceirasService', () => {
     };
     const servico = new ProcessadorOperacoesFinanceirasService(
       config as never,
-      executar as never,
+      executarCancelamento as never,
+      executarConsulta as never,
       operacoes as never,
     );
     servico.onModuleInit();
     expect((servico as { intervalo?: unknown }).intervalo).toBeUndefined();
   });
 
+  it('inicia intervalo quando habilitado', () => {
+    const config = {
+      get: (chave: string) => {
+        if (chave === 'CANCELAMENTO_FINANCEIRO_PROCESSADOR_HABILITADO')
+          return 'true';
+        if (chave === 'CANCELAMENTO_FINANCEIRO_PROCESSADOR_INTERVAL_MS')
+          return '5000';
+        return undefined;
+      },
+    };
+    const servico = new ProcessadorOperacoesFinanceirasService(
+      config as never,
+      { executar: jest.fn() } as never,
+      { executar: jest.fn() } as never,
+      { reivindicarEmAndamento: jest.fn() } as never,
+    );
+    servico.onModuleInit();
+    expect((servico as { intervalo?: unknown }).intervalo).toBeDefined();
+    servico.onModuleDestroy();
+  });
+
   it('lote vazio não chama executar', async () => {
-    const executar = { executar: jest.fn() };
+    const executarCancelamento = { executar: jest.fn() };
+    const executarConsulta = { executar: jest.fn() };
     const operacoes = {
       reivindicarEmAndamento: jest.fn().mockResolvedValue([]),
     };
@@ -64,10 +92,12 @@ describe('ProcessadorOperacoesFinanceirasService', () => {
     };
     const servico = new ProcessadorOperacoesFinanceirasService(
       config as never,
-      executar as never,
+      executarCancelamento as never,
+      executarConsulta as never,
       operacoes as never,
     );
     await servico.processarLote();
-    expect(executar.executar).not.toHaveBeenCalled();
+    expect(executarCancelamento.executar).not.toHaveBeenCalled();
+    expect(executarConsulta.executar).not.toHaveBeenCalled();
   });
 });

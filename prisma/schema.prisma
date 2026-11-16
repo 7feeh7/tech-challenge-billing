@@ -20,6 +20,7 @@ enum SituacaoCobranca {
   INTENCAO
   PENDENTE
   PAGA
+  EXPIRADA
   CANCELADA
   ESTORNO_EM_ANDAMENTO
   ESTORNADA
@@ -33,6 +34,29 @@ enum SituacaoOperacaoFinanceira {
 
 enum TipoOperacaoFinanceira {
   CANCELAMENTO_FINANCEIRO
+  CONSULTA_SITUACAO_FINANCEIRA
+}
+
+enum FinalidadeConsultaSituacaoFinanceira {
+  PRAZO_DE_REFERENCIA_VENCIDO
+  EXCECAO_E10
+}
+
+enum ResultadoConsultaSituacaoFinanceira {
+  PAGO_NO_PRAZO
+  SEM_PAGAMENTO
+  INDETERMINADA
+}
+
+enum SituacaoEstornoConsulta {
+  NENHUM
+  EM_ANDAMENTO
+  REALIZADO
+  INDETERMINADO
+}
+
+enum TipoPendenciaFinanceiraMonitoramento {
+  SITUACAO_FINANCEIRA_INDETERMINADA
 }
 
 enum ResultadoExecucaoCancelamento {
@@ -233,7 +257,10 @@ model OperacaoFinanceira {
   tipo                         TipoOperacaoFinanceira
   situacao                     SituacaoOperacaoFinanceira     @default(EM_ANDAMENTO)
   chaveIdempotenciaMercadoPago String                         @unique @map("chave_idempotencia_mercado_pago") @db.Uuid
-  resultadoExecucao            ResultadoExecucaoCancelamento    @map("resultado_execucao")
+  resultadoExecucao            ResultadoExecucaoCancelamento?   @map("resultado_execucao")
+  consultaId                   String?                        @unique @map("consulta_id") @db.Uuid
+  finalidadeConsulta           FinalidadeConsultaSituacaoFinanceira? @map("finalidade_consulta")
+  resultadoConsulta            ResultadoConsultaSituacaoFinanceira? @map("resultado_consulta")
   motivoCancelamento           String?                        @map("motivo_cancelamento")
   etapaOrigem                  String?                        @map("etapa_origem")
   cobrancaId                   String?                        @map("cobranca_id") @db.Uuid
@@ -280,4 +307,20 @@ model MensagemProcessada {
   processadoEm DateTime @default(now()) @map("processado_em")
 
   @@map("mensagens_processadas")
+}
+
+model PendenciaFinanceiraMonitoramento {
+  id              String                              @id @default(uuid()) @db.Uuid
+  tipo            TipoPendenciaFinanceiraMonitoramento
+  operacaoId      String?                             @map("operacao_id") @db.Uuid
+  cobrancaId      String?                             @map("cobranca_id") @db.Uuid
+  ordemServicoId  String                              @map("ordem_servico_id") @db.Uuid
+  rodada          Int
+  correlationId   String                              @map("correlation_id") @db.Uuid
+  motivo          String?
+  resolvidoEm     DateTime?                           @map("resolvido_em")
+  criadoEm        DateTime                            @default(now()) @map("criado_em")
+
+  @@index([tipo, resolvidoEm])
+  @@map("pendencias_financeira_monitoramento")
 }

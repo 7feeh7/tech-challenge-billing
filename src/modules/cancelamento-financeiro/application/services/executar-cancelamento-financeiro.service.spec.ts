@@ -31,6 +31,7 @@ const operacaoBase = {
   ordemServicoId: 'os1',
   rodada: 1,
   correlationId: 'corr',
+  tipo: 'CANCELAMENTO_FINANCEIRO' as const,
   situacao: 'EM_ANDAMENTO' as const,
   chaveIdempotenciaMercadoPago: 'chave-mp',
   resultadoExecucao: 'REPARO_NAO_INICIADO' as const,

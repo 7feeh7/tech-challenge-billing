@@ -12,6 +12,7 @@ import {
 } from '../../application/ports/fila-mensagens.gateway';
 import {
   EVENTO_CANCELAR_FINANCEIRO,
+  EVENTO_CONSULTAR_SITUACAO_FINANCEIRA,
   EVENTO_GERAR_ORCAMENTO,
 } from '../../envelope';
 import { validarEnvelopeBase } from '../../validar-envelope';
@@ -29,6 +30,14 @@ export const PROCESSADOR_CANCELAR_FINANCEIRO = Symbol(
 );
 
 export interface ProcessadorCancelarFinanceiro {
+  processar(envelope: unknown): Promise<void>;
+}
+
+export const PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO = Symbol(
+  'PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO',
+);
+
+export interface ProcessadorConsultarSituacaoFinanceiro {
   processar(envelope: unknown): Promise<void>;
 }
 
@@ -50,6 +59,8 @@ export class ConsumidorFilaBillingService
     private readonly gerarOrcamento: ProcessadorGerarOrcamento,
     @Inject(PROCESSADOR_CANCELAR_FINANCEIRO)
     private readonly cancelarFinanceiro: ProcessadorCancelarFinanceiro,
+    @Inject(PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO)
+    private readonly consultarSituacaoFinanceira: ProcessadorConsultarSituacaoFinanceiro,
   ) {
     this.filaUrl = config.get<string>('SQS_BILLING_IN_URL');
     this.habilitado =
@@ -87,6 +98,10 @@ export class ConsumidorFilaBillingService
           await this.gerarOrcamento.processar(envelope);
         } else if (envelope.eventType === EVENTO_CANCELAR_FINANCEIRO) {
           await this.cancelarFinanceiro.processar(envelope);
+        } else if (
+          envelope.eventType === EVENTO_CONSULTAR_SITUACAO_FINANCEIRA
+        ) {
+          await this.consultarSituacaoFinanceira.processar(envelope);
         }
 
         await this.fila.confirmar(this.filaUrl, mensagem.receiptHandle);

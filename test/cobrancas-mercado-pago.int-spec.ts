@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import type { CobrancaGateway } from '../src/modules/cobrancas/application/ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '../src/modules/cobrancas/application/ports/mercado-pago.gateway';
 import {
@@ -16,9 +16,12 @@ import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import type { UnitOfWork } from '../src/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '../src/shared/database/unit-of-work.port';
+import { configIntegracaoCobrancas } from './helpers/config-integracao-cobrancas';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Cobranças — Mercado Pago (integração)', () => {
+  let nestModule: TestingModule;
   let prisma: PrismaService;
   let uow: UnitOfWork;
   let cobrancas: CobrancaGateway;
@@ -56,20 +59,16 @@ describe('Cobranças — Mercado Pago (integração)', () => {
     exigirDatabaseUrl();
   });
 
+  afterEach(async () => {
+    await fecharModuloIntegracao(nestModule);
+  });
+
   beforeEach(async () => {
-    const module = await Test.createTestingModule({
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
-          load: [
-            () => ({
-              OUTBOX_PUBLISHER_HABILITADO: 'false',
-              SQS_CONSUMER_HABILITADO: 'false',
-              COBRANCA_CRIACAO_PROCESSADOR_HABILITADO: 'false',
-              COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO: 'false',
-              MP_PAYER_EMAIL: 'comprador@example.com',
-            }),
-          ],
+          load: [configIntegracaoCobrancas],
         }),
         PrismaModule,
         CobrancasModule,
@@ -79,11 +78,11 @@ describe('Cobranças — Mercado Pago (integração)', () => {
       .useValue(mpMock)
       .compile();
 
-    prisma = module.get(PrismaService);
-    uow = module.get(UNIT_OF_WORK);
-    cobrancas = module.get(COBRANCA_GATEWAY);
-    criarOrder = module.get(CriarOrderMercadoPagoService);
-    conciliar = module.get(ConciliarCobrancaService);
+    prisma = nestModule.get(PrismaService);
+    uow = nestModule.get(UNIT_OF_WORK);
+    cobrancas = nestModule.get(COBRANCA_GATEWAY);
+    criarOrder = nestModule.get(CriarOrderMercadoPagoService);
+    conciliar = nestModule.get(ConciliarCobrancaService);
 
     await prisma.tentativaPagamentoRecusada.deleteMany();
     await prisma.avisoWebhookMercadoPago.deleteMany();
@@ -93,10 +92,6 @@ describe('Cobranças — Mercado Pago (integração)', () => {
     await prisma.orcamentoItem.deleteMany();
     await prisma.orcamento.deleteMany();
     await prisma.mensagemOutbox.deleteMany();
-  });
-
-  afterAll(async () => {
-    await prisma?.$disconnect();
   });
 
   it('cria order, publica CobrancaCriada e confirma pagamento por consulta', async () => {

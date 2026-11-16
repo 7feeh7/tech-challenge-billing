@@ -39,6 +39,10 @@ export interface CobrancaGateway {
     limite: number,
     posseMs: number,
   ): Promise<Cobranca[]>;
+  reivindicarPendentesExpiracao(
+    limite: number,
+    posseMs: number,
+  ): Promise<Cobranca[]>;
   buscarPorMercadoPagoOrderId(
     mercadoPagoOrderId: string,
   ): Promise<Cobranca | null>;

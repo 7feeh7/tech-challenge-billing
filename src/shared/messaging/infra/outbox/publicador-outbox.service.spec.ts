@@ -3,6 +3,25 @@ import { DESTINO_FILA_OS } from '../../envelope';
 import { PublicadorOutboxService } from './publicador-outbox.service';
 
 describe('PublicadorOutboxService', () => {
+  it('não agenda publicação quando habilitado ausente ou diferente de true', () => {
+    for (const valor of [undefined, 'false', '1', '']) {
+      const config = {
+        get: jest.fn((k: string) => {
+          if (k === 'OUTBOX_PUBLISHER_HABILITADO') return valor;
+          return undefined;
+        }),
+        getOrThrow: jest.fn(),
+      } as unknown as ConfigService;
+      const service = new PublicadorOutboxService(
+        { $transaction: jest.fn() } as never,
+        config,
+        { enviar: jest.fn() } as never,
+      );
+      service.onModuleInit();
+      expect((service as { intervalo?: unknown }).intervalo).toBeUndefined();
+    }
+  });
+
   it('não agenda publicação quando desabilitado', () => {
     const config = {
       get: jest.fn((k: string) => {
@@ -19,6 +38,25 @@ describe('PublicadorOutboxService', () => {
 
     service.onModuleInit();
     expect((service as { intervalo?: unknown }).intervalo).toBeUndefined();
+  });
+
+  it('agenda publicação quando habilitado com true', () => {
+    const config = {
+      get: jest.fn((k: string) => {
+        if (k === 'OUTBOX_PUBLISHER_HABILITADO') return 'true';
+        if (k === 'OUTBOX_PUBLISHER_INTERVAL_MS') return '60000';
+        return undefined;
+      }),
+      getOrThrow: jest.fn(),
+    } as unknown as ConfigService;
+    const service = new PublicadorOutboxService(
+      { $transaction: jest.fn() } as never,
+      config,
+      { enviar: jest.fn() } as never,
+    );
+    service.onModuleInit();
+    expect((service as { intervalo?: unknown }).intervalo).toBeDefined();
+    service.onModuleDestroy();
   });
 
   it('publica mensagens reivindicadas e marca como enviadas', async () => {

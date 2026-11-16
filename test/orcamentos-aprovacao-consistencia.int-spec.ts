@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import type { CobrancaGateway } from '../src/modules/cobrancas/application/ports/cobranca.gateway';
 import { COBRANCA_GATEWAY } from '../src/modules/cobrancas/application/ports/tokens';
 import { AprovarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/aprovar-orcamento.use-case';
@@ -15,8 +15,10 @@ import {
   iniciarDublêOsReservas,
 } from './helpers/dublê-os-reservas';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Orçamentos — consistência da aprovação (integração)', () => {
+  let nestModule: TestingModule | undefined;
   let prisma: PrismaService;
   let processar: ProcessarGerarOrcamentoUseCase;
   let aprovar: AprovarOrcamentoUseCase;
@@ -36,7 +38,7 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
+    await fecharModuloIntegracao(nestModule);
   });
 
   beforeEach(async () => {
@@ -48,7 +50,8 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
   });
 
   async function montarModulo(osUrl: string) {
-    const module = await Test.createTestingModule({
+    await fecharModuloIntegracao(nestModule);
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -70,9 +73,9 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
       ],
     }).compile();
 
-    prisma = module.get(PrismaService);
-    processar = module.get(ProcessarGerarOrcamentoUseCase);
-    aprovar = module.get(AprovarOrcamentoUseCase);
+    prisma = nestModule.get(PrismaService);
+    processar = nestModule.get(ProcessarGerarOrcamentoUseCase);
+    aprovar = nestModule.get(AprovarOrcamentoUseCase);
     await prisma.$executeRawUnsafe('SELECT 1');
   }
 
@@ -111,7 +114,9 @@ describe('Orçamentos — consistência da aprovação (integração)', () => {
         r.status === 'fulfilled' ? r.value.statusHttp : 'erro',
       );
       expect(status.filter((s) => s === 200).length).toBe(1);
-      expect(await prisma.cobranca.count()).toBe(1);
+      expect(await prisma.cobranca.count({ where: { orcamentoId: id } })).toBe(
+        1,
+      );
       const orc = await prisma.orcamento.findUnique({ where: { id } });
       expect(orc?.tentativaAprovacao).toBe(1);
     } finally {

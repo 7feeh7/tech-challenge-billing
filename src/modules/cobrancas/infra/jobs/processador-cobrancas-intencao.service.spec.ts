@@ -27,7 +27,8 @@ describe('ProcessadorCobrancasIntencaoService', () => {
     const config = {
       get: (chave: string) => {
         if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_HABILITADO') return 'true';
-        if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_INTERVAL_MS') return '60000';
+        if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_INTERVAL_MS')
+          return '60000';
         if (chave === 'COBRANCA_REIVINDICACAO_MS') return '30000';
         if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_LOTE') return '5';
         return undefined;
@@ -46,7 +47,8 @@ describe('ProcessadorCobrancasIntencaoService', () => {
     const config = {
       get: (chave: string) => {
         if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_HABILITADO') return 'true';
-        if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_INTERVAL_MS') return '60000';
+        if (chave === 'COBRANCA_CRIACAO_PROCESSADOR_INTERVAL_MS')
+          return '60000';
         return '30000';
       },
     };

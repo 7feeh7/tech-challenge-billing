@@ -28,7 +28,7 @@ export class PublicadorOutboxService implements OnModuleInit, OnModuleDestroy {
     private readonly fila: FilaMensagensGateway,
   ) {
     this.habilitado =
-      this.config.get<string>('OUTBOX_PUBLISHER_HABILITADO') !== 'false';
+      this.config.get<string>('OUTBOX_PUBLISHER_HABILITADO') === 'true';
     this.intervaloMs = Number(
       this.config.get<string>('OUTBOX_PUBLISHER_INTERVAL_MS') ?? '2000',
     );

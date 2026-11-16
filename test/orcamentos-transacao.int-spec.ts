@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { ProcessarGerarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/processar-gerar-orcamento.use-case';
 import { RejeitarOrcamentoUseCase } from '../src/modules/orcamentos/application/use-cases/rejeitar-orcamento.use-case';
 import { SituacaoOrcamentoInvalidaError } from '../src/modules/orcamentos/domain/errors/orcamento.errors';
@@ -18,8 +18,10 @@ import {
   exigirDatabaseUrl,
   verificarConexaoPostgres,
 } from './helpers/exigir-database-integracao';
+import { fecharModuloIntegracao } from './helpers/fechar-modulo-integracao';
 
 describe('Orçamentos — consistência transacional (integração)', () => {
+  let nestModule: TestingModule;
   let prisma: PrismaService;
   let processar: ProcessarGerarOrcamentoUseCase;
   let rejeitar: RejeitarOrcamentoUseCase;
@@ -37,7 +39,7 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   beforeAll(async () => {
     exigirDatabaseUrl();
 
-    const module = await Test.createTestingModule({
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -45,6 +47,7 @@ describe('Orçamentos — consistência transacional (integração)', () => {
             () => ({
               OUTBOX_PUBLISHER_HABILITADO: 'false',
               SQS_CONSUMER_HABILITADO: 'false',
+              APROVACAO_PROCESSADOR_HABILITADO: 'false',
             }),
           ],
         }),
@@ -54,14 +57,14 @@ describe('Orçamentos — consistência transacional (integração)', () => {
       ],
     }).compile();
 
-    prisma = module.get(PrismaService);
-    processar = module.get(ProcessarGerarOrcamentoUseCase);
-    rejeitar = module.get(RejeitarOrcamentoUseCase);
+    prisma = nestModule.get(PrismaService);
+    processar = nestModule.get(ProcessarGerarOrcamentoUseCase);
+    rejeitar = nestModule.get(RejeitarOrcamentoUseCase);
     await verificarConexaoPostgres(() => prisma.$queryRaw`SELECT 1`);
   });
 
   afterAll(async () => {
-    await prisma?.$disconnect();
+    await fecharModuloIntegracao(nestModule);
   });
 
   beforeEach(async () => {
@@ -81,7 +84,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('faz rollback integral se a outbox falhar na mesma transação', async () => {
-
     const outboxQuebrada: OutboxGateway = {
       registrar: async () => {
         throw new Error('falha simulada na outbox');
@@ -114,7 +116,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('reentrega concorrente não duplica orçamento nem outbox', async () => {
-
     await Promise.all([
       processar.processar(exemplo),
       processar.processar(exemplo),
@@ -125,7 +126,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('comando com outro eventId e mesma OS/rodada não duplica orçamento', async () => {
-
     await processar.processar(exemplo);
     await processar.processar({
       ...exemplo,
@@ -138,7 +138,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('rejeição repetida não duplica evento na outbox', async () => {
-
     await processar.processar(exemplo);
     const orc = await prisma.orcamento.findFirst();
     const id = orc?.id as string;
@@ -153,7 +152,6 @@ describe('Orçamentos — consistência transacional (integração)', () => {
   });
 
   it('PrismaUnitOfWork desfaz escrita ao falhar no trabalho', async () => {
-
     const uow = new PrismaUnitOfWork(prisma, {
       get: () => '10000',
     } as never);

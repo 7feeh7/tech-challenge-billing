@@ -22,6 +22,39 @@ describe('ReemitirOrderMercadoPagoService', () => {
     linkPagamento: 'https://old',
   });
 
+  it('não chama MP quando order fica ativa após reivindicar chave', async () => {
+    const mercadoPago: MercadoPagoGateway = {
+      criarOrder: jest.fn(),
+      consultarOrder: jest.fn(),
+      cancelarOrder: jest.fn(),
+      estornarTotal: jest.fn(),
+    };
+    const servico = new ReemitirOrderMercadoPagoService(
+      new UnitOfWorkFake(),
+      {
+        buscarPorId: jest.fn().mockResolvedValue(cobranca),
+      } as unknown as CobrancaGateway,
+      {
+        garantirReemissaoEmAndamento: jest
+          .fn()
+          .mockResolvedValue('chave-reemissao'),
+      } as unknown as OperacaoCriacaoOrderGateway,
+      {
+        buscarAtivaPorCobrancaId: jest
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: 'omp' }),
+        buscarUltimaPorCobrancaId: jest.fn(),
+      } as unknown as OrderMercadoPagoGateway,
+      mercadoPago,
+      { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
+      'comprador@example.com',
+    );
+    await servico.executar('c1', null);
+    expect(mercadoPago.criarOrder).not.toHaveBeenCalled();
+  });
+
   it('não reemite quando ainda existe order ativa', async () => {
     const mercadoPago: MercadoPagoGateway = {
       criarOrder: jest.fn(),

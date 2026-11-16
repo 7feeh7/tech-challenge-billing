@@ -18,6 +18,7 @@ import type { MercadoPagoGateway } from '../ports/mercado-pago.gateway';
 import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gateway';
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
 import type { ReemitirOrderMercadoPagoService } from './reemitir-order-mercado-pago.service';
+import type { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
 
 export class ConciliarCobrancaService {
   constructor(
@@ -28,6 +29,7 @@ export class ConciliarCobrancaService {
     private readonly tentativas: TentativaRecusaGateway,
     private readonly outbox: OutboxGateway,
     private readonly reemitir: ReemitirOrderMercadoPagoService,
+    private readonly pagamentoTardio: TratarPagamentoTardioService,
   ) {}
 
   async conciliarPorCobrancaId(cobrancaId: string): Promise<void> {
@@ -56,13 +58,14 @@ export class ConciliarCobrancaService {
 
     const interpretacao = interpretarSituacaoFinanceira(consulta.order);
 
-    const reemitirAposCommit = await this.unitOfWork.executar(async (ctx) => {
+    const acaoAposCommit = await this.unitOfWork.executar(async (ctx) => {
       let pedidoReemissao: {
         cobrancaId: string;
         posseAte: Date | null;
       } | null = null;
+      let pedidoPagamentoTardio = false;
       const atual = await this.cobrancas.buscarPorId(cobrancaId);
-      if (!atual?.id) return pedidoReemissao;
+      if (!atual?.id) return { pedidoReemissao, pedidoPagamentoTardio };
 
       if (order.id) {
         await this.orders.atualizarSituacao(
@@ -76,14 +79,26 @@ export class ConciliarCobrancaService {
       if (atual.jaPaga()) {
         atual.liberarBloqueioConciliacao();
         await this.gravarCobranca(ctx, cobrancaId, atual, posseAte);
-        return pedidoReemissao;
+        return { pedidoReemissao, pedidoPagamentoTardio };
       }
 
       if (interpretacao.tipo === 'paga') {
+        if (
+          this.pagamentoTardio.deveTratarPagamentoTardio(
+            atual,
+            interpretacao.aprovadoEm,
+          )
+        ) {
+          pedidoPagamentoTardio = true;
+          const pendente = this.clonar(atual);
+          pendente.liberarBloqueioConciliacao();
+          await this.gravarCobranca(ctx, cobrancaId, pendente, posseAte);
+          return { pedidoReemissao, pedidoPagamentoTardio };
+        }
         const copia = this.clonar(atual);
         copia.confirmarPagamento(interpretacao.aprovadoEm);
         if (!(await this.gravarCobranca(ctx, cobrancaId, copia, posseAte))) {
-          return pedidoReemissao;
+          return { pedidoReemissao, pedidoPagamentoTardio };
         }
 
         const eventId = randomUUID();
@@ -112,7 +127,7 @@ export class ConciliarCobrancaService {
           correlationId: atual.correlationId,
           destino: DESTINO_FILA_OS,
         });
-        return pedidoReemissao;
+        return { pedidoReemissao, pedidoPagamentoTardio };
       }
 
       if (interpretacao.tipo === 'recusada' && order.id) {
@@ -125,7 +140,7 @@ export class ConciliarCobrancaService {
         const copia = this.clonar(atual);
         copia.liberarBloqueioConciliacao();
         await this.gravarCobranca(ctx, cobrancaId, copia, posseAte);
-        return pedidoReemissao;
+        return { pedidoReemissao, pedidoPagamentoTardio };
       }
 
       if (interpretacao.tipo === 'encerrada_sem_pagamento') {
@@ -142,19 +157,32 @@ export class ConciliarCobrancaService {
         ) {
           pedidoReemissao = { cobrancaId, posseAte };
         }
-        return pedidoReemissao;
+        return { pedidoReemissao, pedidoPagamentoTardio };
       }
 
       const pendente = this.clonar(atual);
       pendente.liberarBloqueioConciliacao();
       await this.gravarCobranca(ctx, cobrancaId, pendente, posseAte);
-      return pedidoReemissao;
+      return { pedidoReemissao, pedidoPagamentoTardio };
     });
 
-    if (reemitirAposCommit) {
+    if (acaoAposCommit.pedidoPagamentoTardio && order.id) {
+      await this.pagamentoTardio.tratar({
+        cobrancaId,
+        posseAte,
+        orderId: order.id,
+        mercadoPagoOrderId: order.mercadoPagoOrderId,
+        aprovadoEm:
+          interpretacao.tipo === 'paga' ? interpretacao.aprovadoEm : new Date(),
+        orderConsultada: consulta.order,
+      });
+      return;
+    }
+
+    if (acaoAposCommit.pedidoReemissao) {
       await this.reemitir.executar(
-        reemitirAposCommit.cobrancaId,
-        reemitirAposCommit.posseAte,
+        acaoAposCommit.pedidoReemissao.cobrancaId,
+        acaoAposCommit.pedidoReemissao.posseAte,
       );
     }
   }
