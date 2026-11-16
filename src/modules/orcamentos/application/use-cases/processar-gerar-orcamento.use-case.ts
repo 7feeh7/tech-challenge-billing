@@ -27,7 +27,8 @@ export class ProcessarGerarOrcamentoUseCase {
   async processar(envelopeBruto: unknown): Promise<void> {
     validarEnvelopeBase(envelopeBruto);
 
-    const envelope = envelopeBruto as unknown as EnvelopeMensagem<PayloadGerarOrcamento>;
+    const envelope =
+      envelopeBruto as unknown as EnvelopeMensagem<PayloadGerarOrcamento>;
     if (envelope.eventType !== EVENTO_GERAR_ORCAMENTO) {
       return;
     }

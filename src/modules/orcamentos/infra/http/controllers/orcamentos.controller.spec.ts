@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
-import { OrcamentosController } from './orcamentos.controller';
 import { BuscarOrcamentoUseCase } from '@/modules/orcamentos/application/use-cases/buscar-orcamento.use-case';
 import { ListarOrcamentosUseCase } from '@/modules/orcamentos/application/use-cases/listar-orcamentos.use-case';
 import { RejeitarOrcamentoUseCase } from '@/modules/orcamentos/application/use-cases/rejeitar-orcamento.use-case';
+import { OrcamentosController } from './orcamentos.controller';
 
 describe('OrcamentosController', () => {
   let controller: OrcamentosController;
@@ -25,13 +25,23 @@ describe('OrcamentosController', () => {
   });
 
   it('lista orçamentos', async () => {
-    listar.execute.mockResolvedValue({ itens: [], total: 0, page: 1, limit: 10 });
+    listar.execute.mockResolvedValue({
+      itens: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+    });
     await controller.findAll(1, 10, undefined, {});
     expect(listar.execute).toHaveBeenCalled();
   });
 
   it('filtra por cliente autenticado', async () => {
-    listar.execute.mockResolvedValue({ itens: [], total: 0, page: 1, limit: 10 });
+    listar.execute.mockResolvedValue({
+      itens: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+    });
     await controller.findAll(1, 10, 'os-1', {
       user: { sub: 'cliente-1', tipo: 'CLIENTE', perfil: 'CLIENTE' },
     } as never);

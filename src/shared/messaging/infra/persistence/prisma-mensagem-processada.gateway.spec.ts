@@ -19,6 +19,13 @@ describe('PrismaMensagemProcessadaGateway', () => {
     await expect(gateway.jaProcessada(contexto, 'e1')).resolves.toBe(true);
   });
 
+  it('busca hash de evento processado', async () => {
+    cliente.mensagemProcessada.findUnique.mockResolvedValue({
+      hashConteudo: 'abc',
+    });
+    await expect(gateway.buscarHash(contexto, 'e1')).resolves.toBe('abc');
+  });
+
   it('registra eventId processado', async () => {
     await gateway.registrar(contexto, 'e1', 'hash');
     expect(cliente.mensagemProcessada.create).toHaveBeenCalled();

@@ -83,6 +83,7 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
     });
     expect(orcamentos).toHaveLength(1);
     expect(orcamentos[0]?.valorTotalCentavos).toBe(15000);
+    expect(Number.isInteger(orcamentos[0]?.valorTotalCentavos)).toBe(true);
 
     const outbox = await prisma.mensagemOutbox.findMany();
     expect(outbox).toHaveLength(1);

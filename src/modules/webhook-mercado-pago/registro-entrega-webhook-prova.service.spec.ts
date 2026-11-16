@@ -8,7 +8,9 @@ jest.mock('node:fs', () => ({
 
 describe('RegistroEntregaWebhookProvaService', () => {
   it('não grava arquivo quando prova desabilitada', () => {
-    const config = { get: jest.fn().mockReturnValue('false') } as unknown as ConfigService;
+    const config = {
+      get: jest.fn().mockReturnValue('false'),
+    } as unknown as ConfigService;
     const service = new RegistroEntregaWebhookProvaService(config);
     service.registrar({
       recebidaEm: new Date().toISOString(),
@@ -21,7 +23,9 @@ describe('RegistroEntregaWebhookProvaService', () => {
   });
 
   it('grava arquivo quando prova habilitada', () => {
-    const config = { get: jest.fn().mockReturnValue('true') } as unknown as ConfigService;
+    const config = {
+      get: jest.fn().mockReturnValue('true'),
+    } as unknown as ConfigService;
     const service = new RegistroEntregaWebhookProvaService(config);
     service.registrar({
       recebidaEm: new Date().toISOString(),

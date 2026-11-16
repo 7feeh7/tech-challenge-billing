@@ -20,10 +20,15 @@ describe('ItemOrcamentoSnapshot', () => {
     ).toThrow(ItensOrcamentoInvalidosError);
   });
 
+  it('rejeita nome vazio', () => {
+    expect(() => new ItemOrcamentoSnapshot({ ...valido, nome: ' ' })).toThrow(
+      ItensOrcamentoInvalidosError,
+    );
+  });
+
   it('rejeita preço inválido', () => {
     expect(
-      () =>
-        new ItemOrcamentoSnapshot({ ...valido, precoUnitarioCentavos: -1 }),
+      () => new ItemOrcamentoSnapshot({ ...valido, precoUnitarioCentavos: -1 }),
     ).toThrow(ItensOrcamentoInvalidosError);
   });
 });

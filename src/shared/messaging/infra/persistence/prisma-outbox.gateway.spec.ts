@@ -1,6 +1,6 @@
 import { PrismaContextoTransacao } from '@/shared/database/prisma-contexto-transacao';
-import { PrismaOutboxGateway } from './prisma-outbox.gateway';
 import { EVENTO_ORCAMENTO_GERADO } from '../../envelope';
+import { PrismaOutboxGateway } from './prisma-outbox.gateway';
 
 describe('PrismaOutboxGateway', () => {
   it('registra mensagem na outbox', async () => {

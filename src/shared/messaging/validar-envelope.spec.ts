@@ -19,6 +19,22 @@ describe('validarEnvelopeBase', () => {
     ).toThrow(EnvelopeMensagemInvalidoError);
   });
 
+  it('rejeita versão inválida', () => {
+    expect(() =>
+      validarEnvelopeBase({
+        eventId: '1',
+        eventType: 'billing.teste.v1',
+        version: 0,
+        occurredAt: new Date().toISOString(),
+        source: 'billing',
+        correlationId: '2',
+        ordemServicoId: '3',
+        rodada: 1,
+        payload: {},
+      }),
+    ).toThrow(EnvelopeMensagemInvalidoError);
+  });
+
   it('aceita envelope com campos obrigatórios', () => {
     const envelope = {
       eventId: '1',

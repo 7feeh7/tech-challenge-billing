@@ -1,5 +1,8 @@
 import { EVENTO_ORCAMENTO_REJEITADO } from '@/shared/messaging/envelope';
-import { OrcamentoNaoEncontradoError } from '../../domain/errors/orcamento.errors';
+import {
+  OrcamentoNaoEncontradoError,
+  SituacaoOrcamentoInvalidaError,
+} from '../../domain/errors/orcamento.errors';
 import { RejeitarOrcamentoUseCase } from './rejeitar-orcamento.use-case';
 import {
   criarGatewayOrcamentoMock,
@@ -37,6 +40,10 @@ describe('RejeitarOrcamentoUseCase', () => {
     });
 
     expect(saida.situacao).toBe('REJEITADO');
+    await expect(
+      useCase.execute(orcamento.id as string, { motivo: 'Outro' }),
+    ).rejects.toThrow(SituacaoOrcamentoInvalidaError);
+
     expect(outbox.registrar).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ eventType: EVENTO_ORCAMENTO_REJEITADO }),

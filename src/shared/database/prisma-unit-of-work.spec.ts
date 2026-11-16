@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaUnitOfWork } from './prisma-unit-of-work';
+import { ContextoTransacaoMarca } from './unit-of-work.port';
 
 describe('PrismaUnitOfWork', () => {
   it('executa trabalho dentro de $transaction', async () => {
@@ -14,7 +15,7 @@ describe('PrismaUnitOfWork', () => {
     const uow = new PrismaUnitOfWork(prisma as never, config);
 
     const valor = await uow.executar(async (ctx) => {
-      expect(ctx._contextoTransacao).toBe('transacao');
+      expect(ctx[ContextoTransacaoMarca]).toBeUndefined();
       return 7;
     });
 

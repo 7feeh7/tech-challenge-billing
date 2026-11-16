@@ -39,6 +39,11 @@ describe('ProcessarGerarOrcamentoUseCase', () => {
     );
   });
 
+  it('ignora eventType diferente de GerarOrcamento', async () => {
+    await useCase.processar({ ...exemplo, eventType: 'billing.outro.v1' });
+    expect(gateway.criar).not.toHaveBeenCalled();
+  });
+
   it('cria orçamento, outbox de gerado e marca mensagem processada', async () => {
     mensagens.jaProcessada.mockResolvedValue(false);
     gateway.buscarPorOrdemServicoERodada.mockResolvedValue(null);

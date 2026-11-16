@@ -80,13 +80,7 @@
       "!**/*.constants.ts",
       "!**/generated/**",
       "!**/prisma/**",
-      "!**/*.config.ts",
-      "!shared/messaging/infra/sqs/**",
-      "!shared/messaging/infra/consumo/**",
-      "!shared/messaging/infra/outbox/**",
-      "!modules/webhook-mercado-pago/dto/**",
-      "!shared/messaging/application/ports/**",
-      "!modules/orcamentos/application/ports/**"
+      "!**/*.config.ts"
     ],
     "coverageDirectory": "../coverage",
     "coverageReporters": [
@@ -96,14 +90,8 @@
       "cobertura"
     ],
     "coverageThreshold": {
-      "./src/modules/orcamentos/": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      },
       "global": {
-        "branches": 75,
+        "branches": 80,
         "functions": 80,
         "lines": 80,
         "statements": 80

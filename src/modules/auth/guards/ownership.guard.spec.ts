@@ -1,8 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
-  OwnershipResource,
   OWNERSHIP_KEY,
+  OwnershipResource,
 } from '../decorators/ownership.decorator';
 import { OwnershipGuard } from './ownership.guard';
 
@@ -52,6 +52,27 @@ describe('OwnershipGuard', () => {
     } as never;
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it('nega cliente quando orçamento não existe', async () => {
+    reflector.getAllAndOverride = jest
+      .fn()
+      .mockReturnValue(OwnershipResource.ORCAMENTO);
+    prisma.orcamento.findUnique.mockResolvedValue(null);
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: { sub: 'cliente-1', tipo: 'CLIENTE', perfil: 'CLIENTE' },
+          params: { id: 'inexistente' },
+        }),
+      }),
+    } as never;
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('nega cliente em orçamento de outro', async () => {

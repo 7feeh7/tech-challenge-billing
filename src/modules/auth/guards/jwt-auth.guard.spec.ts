@@ -1,7 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
@@ -60,6 +60,34 @@ describe('JwtAuthGuard', () => {
       switchToHttp: () => ({ getRequest: () => ({ headers: {} }) }),
     } as never;
     await expect(guard.canActivate(ctxPublico)).resolves.toBe(true);
+  });
+
+  it('rejeita token de cliente com issuer inválido', async () => {
+    jwtService.verifyAsync = jest.fn().mockResolvedValue({
+      sub: 'cliente-1',
+      tipo: 'CLIENTE',
+      perfil: 'CLIENTE',
+      iss: 'issuer-errado',
+      aud: 'tech-challenge-api',
+    });
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejeita token de cliente com perfil inválido', async () => {
+    jwtService.verifyAsync = jest.fn().mockResolvedValue({
+      sub: 'cliente-1',
+      tipo: 'CLIENTE',
+      perfil: 'ADMINISTRADOR',
+      iss: 'tech-challenge-auth',
+      aud: 'tech-challenge-api',
+    });
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('rejeita token interno sem email', async () => {

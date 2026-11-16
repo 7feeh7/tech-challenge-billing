@@ -1,6 +1,6 @@
+import { criarOrcamentoFake } from '../../application/use-cases/test-doubles';
 import { SituacaoOrcamento } from '../../domain/situacao-orcamento';
 import { PrismaOrcamentoMapper } from './prisma-orcamento.mapper';
-import { criarOrcamentoFake } from '../../application/use-cases/test-doubles';
 
 describe('PrismaOrcamentoMapper', () => {
   it('converte linha do banco para domínio', () => {

@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RolesGuard } from './roles.guard';
 import { PerfilUsuario } from '../perfil-usuario';
+import { RolesGuard } from './roles.guard';
 
 describe('RolesGuard', () => {
   const reflector = {

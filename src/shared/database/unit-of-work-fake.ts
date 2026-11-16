@@ -1,7 +1,11 @@
-import type { ContextoTransacao, UnitOfWork } from './unit-of-work.port';
+import {
+  type ContextoTransacao,
+  ContextoTransacaoMarca,
+  type UnitOfWork,
+} from './unit-of-work.port';
 
 const contextoFalso: ContextoTransacao = {
-  _contextoTransacao: 'transacao',
+  [ContextoTransacaoMarca]: undefined,
 };
 
 export class UnitOfWorkFake implements UnitOfWork {
