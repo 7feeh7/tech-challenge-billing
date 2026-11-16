@@ -46,10 +46,14 @@ export class ProcessadorConciliacaoCobrancasService
     const mpTimeout = Number(
       this.config.get<string>('MP_REQUEST_TIMEOUT_MS') ?? '30000',
     );
+    const loteExpiracao = Number(
+      this.config.get<string>('COBRANCA_EXPIRACAO_PROCESSADOR_LOTE') ?? '10',
+    );
     const overridePosse = this.config.get<string>('COBRANCA_REIVINDICACAO_MS');
     this.posseMs = calcularPosseCobrancaMs({
       loteConciliacao: this.lote,
       loteCriacao,
+      loteExpiracao,
       mpRequestTimeoutMs: mpTimeout,
       overrideMs: overridePosse ? Number(overridePosse) : undefined,
     });

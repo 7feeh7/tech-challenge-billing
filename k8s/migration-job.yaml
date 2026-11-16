@@ -1,0 +1,34 @@
+# Aplicado pelo workflow migrate.yml (workflow_dispatch na main), antes do deploy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: billing-migrate
+  namespace: billing
+  labels:
+    app: billing-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: billing-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ECR_REPOSITORY_URL:__IMAGE_TAG__
+          imagePullPolicy: Always
+          command: ["yarn", "prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef:
+                name: billing-config
+            - secretRef:
+                name: billing-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
