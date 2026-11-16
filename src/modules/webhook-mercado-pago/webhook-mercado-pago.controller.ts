@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '@/modules/auth/decorators/public.decorator';
 import { ConsultarOrderMercadoPagoService } from './consultar-order-mercado-pago.service';
 import { AssinaturaWebhookInvalidaError } from './errors/assinatura-webhook-invalida.error';
 import { RegistroEntregaWebhookProvaService } from './registro-entrega-webhook-prova.service';
@@ -18,6 +19,7 @@ import { RegistroNotificacaoWebhookService } from './registro-notificacao-webhoo
 import { ValidarAssinaturaWebhookService } from './validar-assinatura-webhook.service';
 
 @ApiTags('Webhooks')
+@Public()
 @Controller('webhooks/mercado-pago')
 export class WebhookMercadoPagoController {
   constructor(

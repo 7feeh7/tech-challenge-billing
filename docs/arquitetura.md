@@ -4,7 +4,7 @@ Repositório autônomo (`tech-challenge-billing`) na Fase 4. Referência de padr
 
 ## Responsabilidade
 
-Dono de orçamentos, aprovação, cobrança, estorno e pendências manuais. O esqueleto (E02) expõe apenas health, infraestrutura e contratos de mensagens não financeiras.
+Dono de orçamentos, aprovação, cobrança, estorno e pendências manuais. A E15 entrega geração por mensagem, consulta HTTP e rejeição com outbox e consumidor SQS no processo.
 
 ## Estrutura de código
 

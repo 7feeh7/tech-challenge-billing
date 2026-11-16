@@ -1,0 +1,1 @@
+export const ORCAMENTO_GATEWAY = Symbol('ORCAMENTO_GATEWAY');

@@ -8,4 +8,73 @@ datasource db {
   provider = "postgresql"
 }
 
-// Esquema inicial vazio; entidades de orçamento e cobrança entram nas etapas E15+.
+enum SituacaoOrcamento {
+  GERADO
+  APROVACAO_EM_ANDAMENTO
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+enum TipoItemOrcamento {
+  SERVICO
+  PECA
+}
+
+model Orcamento {
+  id                 String            @id @default(uuid()) @db.Uuid
+  ordemServicoId     String            @map("ordem_servico_id") @db.Uuid
+  rodada             Int
+  clienteId          String            @map("cliente_id") @db.Uuid
+  correlationId      String            @map("correlation_id") @db.Uuid
+  valorTotalCentavos Int               @map("valor_total_centavos")
+  situacao           SituacaoOrcamento @default(GERADO)
+  motivoRejeicao     String?           @map("motivo_rejeicao")
+  tentativaAprovacao Int               @default(0) @map("tentativa_aprovacao")
+  rejeitadoEm        DateTime?         @map("rejeitado_em")
+  criadoEm           DateTime          @default(now()) @map("criado_em")
+  atualizadoEm       DateTime          @updatedAt @map("atualizado_em")
+
+  itens OrcamentoItem[]
+
+  @@unique([ordemServicoId, rodada])
+  @@map("orcamentos")
+}
+
+model OrcamentoItem {
+  id                    String            @id @default(uuid()) @db.Uuid
+  orcamentoId           String            @map("orcamento_id") @db.Uuid
+  tipo                  TipoItemOrcamento
+  itemId                String            @map("item_id") @db.Uuid
+  nome                  String
+  quantidade            Int
+  precoUnitarioCentavos Int               @map("preco_unitario_centavos")
+
+  orcamento Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+
+  @@map("orcamento_itens")
+}
+
+model MensagemOutbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type")
+  envelope      Json
+  correlationId String    @map("correlation_id") @db.Uuid
+  destino       String
+  bloqueadoAte  DateTime? @map("bloqueado_ate")
+  enviadoEm     DateTime? @map("enviado_em")
+  tentativas    Int       @default(0)
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+
+  @@index([enviadoEm, bloqueadoAte])
+  @@map("mensagens_outbox")
+}
+
+model MensagemProcessada {
+  eventId      String   @id @map("event_id") @db.Uuid
+  hashConteudo String   @map("hash_conteudo")
+  processadoEm DateTime @default(now()) @map("processado_em")
+
+  @@map("mensagens_processadas")
+}
