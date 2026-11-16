@@ -18,6 +18,13 @@ enum SituacaoOrcamento {
 
 enum SituacaoCobranca {
   INTENCAO
+  PENDENTE
+  PAGA
+}
+
+enum SituacaoOperacaoCriacaoOrder {
+  EM_ANDAMENTO
+  CONCLUIDA
 }
 
 enum TipoItemOrcamento {
@@ -52,21 +59,93 @@ model Orcamento {
 }
 
 model Cobranca {
-  id                 String           @id @default(uuid()) @db.Uuid
-  orcamentoId        String           @unique @map("orcamento_id") @db.Uuid
-  ordemServicoId     String           @map("ordem_servico_id") @db.Uuid
-  rodada             Int
-  clienteId          String           @map("cliente_id") @db.Uuid
-  correlationId      String           @map("correlation_id") @db.Uuid
-  valorTotalCentavos Int              @map("valor_total_centavos")
-  prazoPagamento     DateTime         @map("prazo_pagamento")
-  situacao           SituacaoCobranca @default(INTENCAO)
-  criadoEm           DateTime         @default(now()) @map("criado_em")
-  atualizadoEm       DateTime         @updatedAt @map("atualizado_em")
+  id                      String           @id @default(uuid()) @db.Uuid
+  orcamentoId             String           @unique @map("orcamento_id") @db.Uuid
+  ordemServicoId          String           @map("ordem_servico_id") @db.Uuid
+  rodada                  Int
+  clienteId               String           @map("cliente_id") @db.Uuid
+  correlationId           String           @map("correlation_id") @db.Uuid
+  valorTotalCentavos      Int              @map("valor_total_centavos")
+  prazoPagamento          DateTime         @map("prazo_pagamento")
+  situacao                SituacaoCobranca @default(INTENCAO)
+  linkPagamento           String?          @map("link_pagamento")
+  pagamentoConfirmadoEm   DateTime?        @map("pagamento_confirmado_em")
+  bloqueadoConciliacaoAte DateTime?        @map("bloqueado_conciliacao_ate")
+  criadoEm                DateTime         @default(now()) @map("criado_em")
+  atualizadoEm            DateTime         @updatedAt @map("atualizado_em")
 
-  orcamento Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  orcamento              Orcamento                 @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  ordersMercadoPago      OrderMercadoPago[]
+  operacaoCriacaoOrder   OperacaoCriacaoOrder?
+  tentativasRecusadas    TentativaPagamentoRecusada[]
+  avisosWebhook          AvisoWebhookMercadoPago[]
 
+  @@index([situacao, bloqueadoConciliacaoAte])
+  @@index([ordemServicoId])
   @@map("cobrancas")
+}
+
+model OrderMercadoPago {
+  id                    String   @id @default(uuid()) @db.Uuid
+  cobrancaId            String   @map("cobranca_id") @db.Uuid
+  mercadoPagoOrderId    String   @unique @map("mercado_pago_order_id")
+  chaveIdempotencia     String   @unique @map("chave_idempotencia") @db.Uuid
+  checkoutUrl           String   @map("checkout_url")
+  statusOrder           String?  @map("status_order")
+  statusDetail          String?  @map("status_detail")
+  ativa                 Boolean  @default(true)
+  criadoEm              DateTime @default(now()) @map("criado_em")
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em")
+
+  cobranca           Cobranca                     @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  tentativasRecusadas TentativaPagamentoRecusada[]
+
+  @@index([cobrancaId, ativa])
+  @@map("orders_mercado_pago")
+}
+
+model OperacaoCriacaoOrder {
+  id                String                       @id @default(uuid()) @db.Uuid
+  cobrancaId        String                       @unique @map("cobranca_id") @db.Uuid
+  chaveIdempotencia String                       @unique @map("chave_idempotencia") @db.Uuid
+  situacao          SituacaoOperacaoCriacaoOrder @default(EM_ANDAMENTO)
+  criadoEm          DateTime                     @default(now()) @map("criado_em")
+  atualizadoEm      DateTime                     @updatedAt @map("atualizado_em")
+
+  cobranca Cobranca @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+
+  @@map("operacoes_criacao_order")
+}
+
+model AvisoWebhookMercadoPago {
+  id             String   @id @default(uuid()) @db.Uuid
+  cobrancaId     String?  @map("cobranca_id") @db.Uuid
+  mercadoPagoOrderId String @map("mercado_pago_order_id")
+  requestId      String?  @map("request_id")
+  notificacaoId  String?  @map("notificacao_id")
+  tipo           String?
+  acao           String?
+  recebidaEm     DateTime @default(now()) @map("recebida_em")
+
+  cobranca Cobranca? @relation(fields: [cobrancaId], references: [id], onDelete: SetNull)
+
+  @@index([mercadoPagoOrderId])
+  @@map("avisos_webhook_mercado_pago")
+}
+
+model TentativaPagamentoRecusada {
+  id                 String   @id @default(uuid()) @db.Uuid
+  cobrancaId         String   @map("cobranca_id") @db.Uuid
+  orderMercadoPagoId String   @map("order_mercado_pago_id") @db.Uuid
+  paymentIdMercadoPago String @map("payment_id_mercado_pago")
+  motivo             String
+  registradaEm       DateTime @default(now()) @map("registrada_em")
+
+  cobranca         Cobranca         @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  orderMercadoPago OrderMercadoPago @relation(fields: [orderMercadoPagoId], references: [id], onDelete: Cascade)
+
+  @@unique([cobrancaId, paymentIdMercadoPago])
+  @@map("tentativas_pagamento_recusadas")
 }
 
 model OrcamentoItem {

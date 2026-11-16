@@ -1,6 +1,8 @@
 export const EVENTO_GERAR_ORCAMENTO = 'billing.gerar-orcamento.v1';
 export const EVENTO_ORCAMENTO_GERADO = 'billing.orcamento-gerado.v1';
 export const EVENTO_ORCAMENTO_REJEITADO = 'billing.orcamento-rejeitado.v1';
+export const EVENTO_COBRANCA_CRIADA = 'billing.cobranca-criada.v1';
+export const EVENTO_PAGAMENTO_CONFIRMADO = 'billing.pagamento-confirmado.v1';
 
 export const DESTINO_FILA_OS = 'os-in';
 
@@ -38,4 +40,19 @@ export interface PayloadOrcamentoGerado {
 export interface PayloadOrcamentoRejeitado {
   orcamentoId: string;
   motivo: string;
+}
+
+export interface PayloadCobrancaCriada {
+  cobrancaId: string;
+  orderId: string;
+  linkPagamento: string;
+  prazoPagamento: string;
+  valorCentavos: number;
+}
+
+export interface PayloadPagamentoConfirmado {
+  cobrancaId: string;
+  orderId: string;
+  aprovadoEm: string;
+  valorCentavos: number;
 }

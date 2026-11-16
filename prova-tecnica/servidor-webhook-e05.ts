@@ -3,14 +3,13 @@
  * Mesma rota e validação HMAC do Billing; grava entregas em resultados/webhook-entregas.jsonl.
  */
 import { createServer } from 'node:http';
-import { ValidarAssinaturaWebhookService } from '../src/modules/webhook-mercado-pago/validar-assinatura-webhook.service';
+import { validarAssinaturaWebhook } from './lib/assinatura-webhook';
 import { ClienteOrders } from './lib/cliente-orders';
 import { carregarConfiguracaoE05 } from './lib/configuracao-e05';
 import { persistirEntregaWebhook } from './lib/persistir-entrega-webhook';
 
 const PORT = Number(process.env.PORT ?? '3000');
 const vistos = new Set<string>();
-const validar = new ValidarAssinaturaWebhookService();
 
 async function main(): Promise<void> {
   const cfg = carregarConfiguracaoE05();
@@ -30,12 +29,12 @@ async function main(): Promise<void> {
 
     const assinaturaOk =
       dataId &&
-      validar.validar({
+      validarAssinaturaWebhook({
         dataId,
         requestId,
         assinaturaCabecalho: assinatura,
         segredo: cfg.webhookSecret,
-      }).valida;
+      });
 
     if (!assinaturaOk) {
       res.statusCode = 401;
