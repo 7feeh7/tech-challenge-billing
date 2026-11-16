@@ -15,7 +15,13 @@ describe('PrismaCobrancaGateway', () => {
       cobranca: { create: jest.fn().mockResolvedValue(criado) },
     };
     const prisma = {
-      cobranca: { create: jest.fn(), findUnique: jest.fn(), count: jest.fn(), findMany: jest.fn(), $transaction: jest.fn() },
+      cobranca: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        count: jest.fn(),
+        findMany: jest.fn(),
+        $transaction: jest.fn(),
+      },
       orderMercadoPago: { findUnique: jest.fn() },
     };
     const gateway = new PrismaCobrancaGateway(prisma as never);
@@ -97,7 +103,11 @@ describe('PrismaCobrancaGateway', () => {
     const clienteTx = {
       cobranca: { update: jest.fn().mockResolvedValue({ id: 'c1' }) },
     };
-    const prisma = { cobranca: { update: jest.fn() }, $transaction: jest.fn(), orderMercadoPago: { findUnique: jest.fn() } };
+    const prisma = {
+      cobranca: { update: jest.fn() },
+      $transaction: jest.fn(),
+      orderMercadoPago: { findUnique: jest.fn() },
+    };
     const gateway = new PrismaCobrancaGateway(prisma as never);
     jest.spyOn(PrismaCobrancaMapper, 'toDomain').mockReturnValue(cobranca);
     const contexto = new PrismaContextoTransacao(clienteTx as never);
@@ -164,7 +174,9 @@ describe('PrismaCobrancaGateway', () => {
       orderMercadoPago: { findUnique: jest.fn() },
     };
     const gateway = new PrismaCobrancaGateway(prisma as never);
-    await expect(gateway.reivindicarIntencoesCriacaoOrder(5, 1000)).resolves.toEqual([]);
+    await expect(
+      gateway.reivindicarIntencoesCriacaoOrder(5, 1000),
+    ).resolves.toEqual([]);
   });
 
   it('reivindica cobranças em intenção', async () => {
@@ -201,7 +213,10 @@ describe('PrismaCobrancaGateway', () => {
       orderMercadoPago: { findUnique: jest.fn() },
     };
     const gateway = new PrismaCobrancaGateway(prisma as never);
-    const reivindicadas = await gateway.reivindicarIntencoesCriacaoOrder(5, 1000);
+    const reivindicadas = await gateway.reivindicarIntencoesCriacaoOrder(
+      5,
+      1000,
+    );
     expect(reivindicadas[0]?.id).toBe('c1');
   });
 

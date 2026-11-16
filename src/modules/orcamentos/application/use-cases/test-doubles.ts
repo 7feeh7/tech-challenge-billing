@@ -30,6 +30,7 @@ export const criarOrcamentoFake = (
 export const criarGatewayOrcamentoMock = (): jest.Mocked<OrcamentoGateway> => ({
   buscarPorId: jest.fn(),
   buscarPorOrdemServicoERodada: jest.fn(),
+  buscarPorOrdemServicoERodadaLeitura: jest.fn(),
   criar: jest.fn(),
   atualizar: jest.fn(),
   listar: jest.fn(),

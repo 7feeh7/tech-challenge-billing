@@ -6,6 +6,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { calcularPosseCobrancaMs } from '../../application/calcular-posse-cobranca';
 import type { CobrancaGateway } from '../../application/ports/cobranca.gateway';
 import { COBRANCA_GATEWAY } from '../../application/ports/tokens';
 import { ConciliarCobrancaService } from '../../application/services/conciliar-cobranca.service';
@@ -30,18 +31,28 @@ export class ProcessadorConciliacaoCobrancasService
     private readonly cobrancas: CobrancaGateway,
   ) {
     this.habilitado =
-      this.config.get<string>('COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO') !==
-      'false';
+      this.config.get<string>('COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO') ===
+      'true';
     this.intervaloMs = Number(
       this.config.get<string>('COBRANCA_CONCILIACAO_PROCESSADOR_INTERVAL_MS') ??
         '10000',
     );
-    this.posseMs = Number(
-      this.config.get<string>('COBRANCA_REIVINDICACAO_MS') ?? '35000',
-    );
     this.lote = Number(
       this.config.get<string>('COBRANCA_CONCILIACAO_PROCESSADOR_LOTE') ?? '10',
     );
+    const loteCriacao = Number(
+      this.config.get<string>('COBRANCA_CRIACAO_PROCESSADOR_LOTE') ?? '5',
+    );
+    const mpTimeout = Number(
+      this.config.get<string>('MP_REQUEST_TIMEOUT_MS') ?? '30000',
+    );
+    const overridePosse = this.config.get<string>('COBRANCA_REIVINDICACAO_MS');
+    this.posseMs = calcularPosseCobrancaMs({
+      loteConciliacao: this.lote,
+      loteCriacao,
+      mpRequestTimeoutMs: mpTimeout,
+      overrideMs: overridePosse ? Number(overridePosse) : undefined,
+    });
   }
 
   onModuleInit(): void {

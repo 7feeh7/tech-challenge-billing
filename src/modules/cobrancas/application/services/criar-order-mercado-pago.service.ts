@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { BloqueioCriacaoCobrancaGateway } from '@/modules/cancelamento-financeiro/application/ports/bloqueio-criacao-cobranca.gateway';
 import type {
   ContextoTransacao,
   UnitOfWork,
@@ -29,6 +30,7 @@ export class CriarOrderMercadoPagoService {
     private readonly orders: OrderMercadoPagoGateway,
     private readonly mercadoPago: MercadoPagoGateway,
     private readonly outbox: OutboxGateway,
+    private readonly bloqueios: BloqueioCriacaoCobrancaGateway,
     private readonly payerEmail: string,
   ) {}
 
@@ -36,6 +38,15 @@ export class CriarOrderMercadoPagoService {
     const cobrancaBase = await this.cobrancas.buscarPorId(cobrancaId);
     if (!cobrancaBase?.id) return;
     if (cobrancaBase.situacao !== SituacaoCobranca.INTENCAO) {
+      return;
+    }
+
+    if (
+      await this.bloqueios.existe(
+        cobrancaBase.ordemServicoId,
+        cobrancaBase.rodada,
+      )
+    ) {
       return;
     }
 

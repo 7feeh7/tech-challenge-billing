@@ -6,6 +6,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { calcularPosseCobrancaMs } from '../../application/calcular-posse-cobranca';
 import type { CobrancaGateway } from '../../application/ports/cobranca.gateway';
 import { COBRANCA_GATEWAY } from '../../application/ports/tokens';
 import { CriarOrderMercadoPagoService } from '../../application/services/criar-order-mercado-pago.service';
@@ -36,12 +37,22 @@ export class ProcessadorCobrancasIntencaoService
       this.config.get<string>('COBRANCA_CRIACAO_PROCESSADOR_INTERVAL_MS') ??
         '10000',
     );
-    this.posseMs = Number(
-      this.config.get<string>('COBRANCA_REIVINDICACAO_MS') ?? '35000',
-    );
     this.lote = Number(
       this.config.get<string>('COBRANCA_CRIACAO_PROCESSADOR_LOTE') ?? '5',
     );
+    const loteConciliacao = Number(
+      this.config.get<string>('COBRANCA_CONCILIACAO_PROCESSADOR_LOTE') ?? '10',
+    );
+    const mpTimeout = Number(
+      this.config.get<string>('MP_REQUEST_TIMEOUT_MS') ?? '30000',
+    );
+    const overridePosse = this.config.get<string>('COBRANCA_REIVINDICACAO_MS');
+    this.posseMs = calcularPosseCobrancaMs({
+      loteConciliacao,
+      loteCriacao: this.lote,
+      mpRequestTimeoutMs: mpTimeout,
+      overrideMs: overridePosse ? Number(overridePosse) : undefined,
+    });
   }
 
   onModuleInit(): void {

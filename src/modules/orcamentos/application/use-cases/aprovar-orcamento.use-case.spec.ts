@@ -33,10 +33,12 @@ describe('AprovarOrcamentoUseCase', () => {
     criar: jest.fn(async (_ctx, c) => c),
     buscarPorOrcamentoId: jest.fn(),
   };
+  const bloqueios = { existe: jest.fn().mockResolvedValue(false) };
   const aplicar = new AplicarResultadoReservaService(
     uow,
     orcamentos,
     cobrancas,
+    bloqueios,
     2,
   );
   const useCase = new AprovarOrcamentoUseCase(

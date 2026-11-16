@@ -22,6 +22,17 @@ export class PrismaOrderMercadoPagoGateway implements OrderMercadoPagoGateway {
     return this.toRegistro(raw);
   }
 
+  async buscarUltimaPorCobrancaId(
+    cobrancaId: string,
+  ): Promise<OrderMercadoPagoRegistro | null> {
+    const raw = await this.prisma.orderMercadoPago.findFirst({
+      where: { cobrancaId },
+      orderBy: { criadoEm: 'desc' },
+    });
+    if (!raw) return null;
+    return this.toRegistro(raw);
+  }
+
   async criar(
     contexto: ContextoTransacao,
     registro: OrderMercadoPagoRegistro,

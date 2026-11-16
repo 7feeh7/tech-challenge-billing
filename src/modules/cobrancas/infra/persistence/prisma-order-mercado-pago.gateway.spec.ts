@@ -56,7 +56,12 @@ describe('PrismaOrderMercadoPagoGateway', () => {
     const prisma = { orderMercadoPago: clienteTx.orderMercadoPago };
     const gateway = new PrismaOrderMercadoPagoGateway(prisma as never);
     const contexto = new PrismaContextoTransacao(clienteTx as never);
-    await gateway.atualizarSituacao(contexto, 'omp1', 'processed', 'accredited');
+    await gateway.atualizarSituacao(
+      contexto,
+      'omp1',
+      'processed',
+      'accredited',
+    );
     await gateway.desativar(contexto, 'omp1');
     expect(clienteTx.orderMercadoPago.update).toHaveBeenCalledTimes(2);
   });

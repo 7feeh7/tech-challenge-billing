@@ -10,6 +10,10 @@ export interface CobrancaGateway {
   criar(contexto: ContextoTransacao, cobranca: Cobranca): Promise<Cobranca>;
   buscarPorId(id: string): Promise<Cobranca | null>;
   buscarPorOrcamentoId(orcamentoId: string): Promise<Cobranca | null>;
+  buscarPorOrdemServicoERodada(
+    ordemServicoId: string,
+    rodada: number,
+  ): Promise<Cobranca | null>;
   listar(
     page: number,
     limit: number,

@@ -10,7 +10,10 @@ import {
   FILA_MENSAGENS,
   type FilaMensagensGateway,
 } from '../../application/ports/fila-mensagens.gateway';
-import { EVENTO_GERAR_ORCAMENTO } from '../../envelope';
+import {
+  EVENTO_CANCELAR_FINANCEIRO,
+  EVENTO_GERAR_ORCAMENTO,
+} from '../../envelope';
 import { validarEnvelopeBase } from '../../validar-envelope';
 
 export const PROCESSADOR_GERAR_ORCAMENTO = Symbol(
@@ -18,6 +21,14 @@ export const PROCESSADOR_GERAR_ORCAMENTO = Symbol(
 );
 
 export interface ProcessadorGerarOrcamento {
+  processar(envelope: unknown): Promise<void>;
+}
+
+export const PROCESSADOR_CANCELAR_FINANCEIRO = Symbol(
+  'PROCESSADOR_CANCELAR_FINANCEIRO',
+);
+
+export interface ProcessadorCancelarFinanceiro {
   processar(envelope: unknown): Promise<void>;
 }
 
@@ -37,6 +48,8 @@ export class ConsumidorFilaBillingService
     private readonly fila: FilaMensagensGateway,
     @Inject(PROCESSADOR_GERAR_ORCAMENTO)
     private readonly gerarOrcamento: ProcessadorGerarOrcamento,
+    @Inject(PROCESSADOR_CANCELAR_FINANCEIRO)
+    private readonly cancelarFinanceiro: ProcessadorCancelarFinanceiro,
   ) {
     this.filaUrl = config.get<string>('SQS_BILLING_IN_URL');
     this.habilitado =
@@ -72,6 +85,8 @@ export class ConsumidorFilaBillingService
 
         if (envelope.eventType === EVENTO_GERAR_ORCAMENTO) {
           await this.gerarOrcamento.processar(envelope);
+        } else if (envelope.eventType === EVENTO_CANCELAR_FINANCEIRO) {
+          await this.cancelarFinanceiro.processar(envelope);
         }
 
         await this.fila.confirmar(this.filaUrl, mensagem.receiptHandle);

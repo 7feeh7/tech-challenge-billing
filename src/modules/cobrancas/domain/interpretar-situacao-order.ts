@@ -16,6 +16,7 @@ export interface OrderMercadoPagoConsultada {
   id: string;
   status?: string;
   statusDetail?: string;
+  refundedAmount?: number;
   pagamentos: PagamentoNaOrder[];
 }
 

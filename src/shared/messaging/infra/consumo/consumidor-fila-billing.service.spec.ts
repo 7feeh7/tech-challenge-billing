@@ -1,5 +1,8 @@
 import { ConfigService } from '@nestjs/config';
-import { EVENTO_GERAR_ORCAMENTO } from '../../envelope';
+import {
+  EVENTO_CANCELAR_FINANCEIRO,
+  EVENTO_GERAR_ORCAMENTO,
+} from '../../envelope';
 import { ConsumidorFilaBillingService } from './consumidor-fila-billing.service';
 
 describe('ConsumidorFilaBillingService', () => {
@@ -37,15 +40,65 @@ describe('ConsumidorFilaBillingService', () => {
       }),
     } as unknown as ConfigService;
 
+    const cancelarFinanceiro = { processar: jest.fn() };
     const consumidor = new ConsumidorFilaBillingService(
       config,
       fila as never,
       processar as never,
+      cancelarFinanceiro as never,
     );
     await consumidor.poller();
 
     expect(processar.processar).toHaveBeenCalled();
     expect(fila.confirmar).toHaveBeenCalledWith('url', 'rh');
+  });
+
+  it('encaminha billing.cancelar-financeiro.v1', async () => {
+    const cancelarFinanceiro = {
+      processar: jest.fn().mockResolvedValue(undefined),
+    };
+    const fila = {
+      receber: jest.fn().mockResolvedValue([
+        {
+          corpo: JSON.stringify({
+            eventId: '550e8400-e29b-41d4-a716-446655440099',
+            eventType: EVENTO_CANCELAR_FINANCEIRO,
+            version: 1,
+            occurredAt: '2026-11-15T10:00:00.000Z',
+            source: 'os-service',
+            correlationId: '550e8400-e29b-41d4-a716-446655440000',
+            causationId: null,
+            ordemServicoId: '550e8400-e29b-41d4-a716-446655440000',
+            rodada: 1,
+            payload: {
+              etapaOrigem: 'CANCELAMENTO_OS',
+              motivo: 'teste',
+              resultadoExecucao: 'REPARO_NAO_INICIADO',
+            },
+          }),
+          receiptHandle: 'rh2',
+        },
+      ]),
+      confirmar: jest.fn(),
+      enviar: jest.fn(),
+    };
+    const config = {
+      get: jest.fn((k: string) => {
+        if (k === 'SQS_BILLING_IN_URL') return 'url';
+        if (k === 'SQS_CONSUMER_HABILITADO') return 'true';
+        return undefined;
+      }),
+    } as unknown as ConfigService;
+
+    const consumidor = new ConsumidorFilaBillingService(
+      config,
+      fila as never,
+      { processar: jest.fn() } as never,
+      cancelarFinanceiro as never,
+    );
+    await consumidor.poller();
+    expect(cancelarFinanceiro.processar).toHaveBeenCalled();
+    expect(fila.confirmar).toHaveBeenCalledWith('url', 'rh2');
   });
 
   it('não confirma mensagem com envelope inválido', async () => {
@@ -67,14 +120,95 @@ describe('ConsumidorFilaBillingService', () => {
       }),
     } as unknown as ConfigService;
 
+    const cancelarFinanceiro = { processar: jest.fn() };
     const consumidor = new ConsumidorFilaBillingService(
       config,
       fila as never,
       processar as never,
+      cancelarFinanceiro as never,
     );
     await consumidor.poller();
 
     expect(processar.processar).not.toHaveBeenCalled();
     expect(fila.confirmar).not.toHaveBeenCalled();
+  });
+
+  it('onModuleDestroy limpa intervalo', () => {
+    const config = {
+      get: jest.fn((k: string) => {
+        if (k === 'SQS_BILLING_IN_URL') return 'url';
+        if (k === 'SQS_CONSUMER_HABILITADO') return 'true';
+        if (k === 'SQS_CONSUMER_INTERVAL_MS') return '60000';
+        return undefined;
+      }),
+    } as unknown as ConfigService;
+    const consumidor = new ConsumidorFilaBillingService(
+      config,
+      { receber: jest.fn() } as never,
+      { processar: jest.fn() } as never,
+      { processar: jest.fn() } as never,
+    );
+    const clearSpy = jest.spyOn(global, 'clearInterval');
+    consumidor.onModuleInit();
+    expect((consumidor as { intervalo?: unknown }).intervalo).toBeDefined();
+    consumidor.onModuleDestroy();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
+
+  it('não inicia polling quando consumidor desabilitado', () => {
+    const config = {
+      get: jest.fn(() => undefined),
+    } as unknown as ConfigService;
+    const consumidor = new ConsumidorFilaBillingService(
+      config,
+      { receber: jest.fn() } as never,
+      { processar: jest.fn() } as never,
+      { processar: jest.fn() } as never,
+    );
+    consumidor.onModuleInit();
+    expect((consumidor as { intervalo?: unknown }).intervalo).toBeUndefined();
+  });
+
+  it('confirma envelope válido de tipo desconhecido sem processador', async () => {
+    const fila = {
+      receber: jest.fn().mockResolvedValue([
+        {
+          corpo: JSON.stringify({
+            eventId: '550e8400-e29b-41d4-a716-446655440099',
+            eventType: 'billing.desconhecido.v1',
+            version: 1,
+            occurredAt: '2026-11-15T10:00:00.000Z',
+            source: 'x',
+            correlationId: '550e8400-e29b-41d4-a716-446655440000',
+            causationId: null,
+            ordemServicoId: '550e8400-e29b-41d4-a716-446655440000',
+            rodada: 1,
+            payload: {},
+          }),
+          receiptHandle: 'rh3',
+        },
+      ]),
+      confirmar: jest.fn(),
+    };
+    const config = {
+      get: jest.fn((k: string) => {
+        if (k === 'SQS_BILLING_IN_URL') return 'url';
+        if (k === 'SQS_CONSUMER_HABILITADO') return 'true';
+        return undefined;
+      }),
+    } as unknown as ConfigService;
+    const gerar = { processar: jest.fn() };
+    const cancelar = { processar: jest.fn() };
+    const consumidor = new ConsumidorFilaBillingService(
+      config,
+      fila as never,
+      gerar as never,
+      cancelar as never,
+    );
+    await consumidor.poller();
+    expect(gerar.processar).not.toHaveBeenCalled();
+    expect(cancelar.processar).not.toHaveBeenCalled();
+    expect(fila.confirmar).toHaveBeenCalledWith('url', 'rh3');
   });
 });

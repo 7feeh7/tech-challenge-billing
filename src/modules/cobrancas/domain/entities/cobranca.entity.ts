@@ -127,4 +127,65 @@ export class Cobranca {
   aindaNoPrazo(agora = new Date()): boolean {
     return agora.getTime() <= this.prazoPagamento.getTime();
   }
+
+  marcarCancelada(): void {
+    if (this._situacao === SituacaoCobranca.CANCELADA) {
+      return;
+    }
+    if (
+      this._situacao !== SituacaoCobranca.INTENCAO &&
+      this._situacao !== SituacaoCobranca.PENDENTE
+    ) {
+      throw new SituacaoCobrancaInvalidaError(
+        this._situacao,
+        'marcarCancelada',
+      );
+    }
+    this._situacao = SituacaoCobranca.CANCELADA;
+    this._linkPagamento = null;
+    this._bloqueadoConciliacaoAte = null;
+  }
+
+  iniciarEstorno(): void {
+    if (this._situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO) {
+      return;
+    }
+    if (this._situacao !== SituacaoCobranca.PAGA) {
+      throw new SituacaoCobrancaInvalidaError(this._situacao, 'iniciarEstorno');
+    }
+    this._situacao = SituacaoCobranca.ESTORNO_EM_ANDAMENTO;
+    this._bloqueadoConciliacaoAte = null;
+  }
+
+  marcarEstornada(): void {
+    if (this._situacao === SituacaoCobranca.ESTORNADA) {
+      return;
+    }
+    if (
+      this._situacao !== SituacaoCobranca.ESTORNO_EM_ANDAMENTO &&
+      this._situacao !== SituacaoCobranca.PAGA &&
+      this._situacao !== SituacaoCobranca.PENDENCIA_MANUAL
+    ) {
+      throw new SituacaoCobrancaInvalidaError(
+        this._situacao,
+        'marcarEstornada',
+      );
+    }
+    this._situacao = SituacaoCobranca.ESTORNADA;
+    this._bloqueadoConciliacaoAte = null;
+  }
+
+  marcarPendenciaManual(): void {
+    if (this._situacao === SituacaoCobranca.PENDENCIA_MANUAL) {
+      return;
+    }
+    if (this._situacao !== SituacaoCobranca.PAGA) {
+      throw new SituacaoCobrancaInvalidaError(
+        this._situacao,
+        'marcarPendenciaManual',
+      );
+    }
+    this._situacao = SituacaoCobranca.PENDENCIA_MANUAL;
+    this._bloqueadoConciliacaoAte = null;
+  }
 }

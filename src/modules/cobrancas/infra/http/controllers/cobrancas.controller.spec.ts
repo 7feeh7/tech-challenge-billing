@@ -4,7 +4,9 @@ import { CobrancasController } from './cobrancas.controller';
 describe('CobrancasController', () => {
   it('lista cobranças com filtro de cliente', async () => {
     const listar = {
-      execute: jest.fn().mockResolvedValue({ itens: [], total: 0, page: 1, limit: 10 }),
+      execute: jest
+        .fn()
+        .mockResolvedValue({ itens: [], total: 0, page: 1, limit: 10 }),
     };
     const controller = new CobrancasController(listar as never);
     await controller.findAll(1, 10, 'os-1', {

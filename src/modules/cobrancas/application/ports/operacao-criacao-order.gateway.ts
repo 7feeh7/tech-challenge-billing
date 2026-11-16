@@ -20,9 +20,8 @@ export interface OperacaoCriacaoOrderGateway {
     contexto: ContextoTransacao,
     cobrancaId: string,
   ): Promise<void>;
-  reiniciarParaNovaOrder(
+  garantirReemissaoEmAndamento(
     contexto: ContextoTransacao,
     cobrancaId: string,
-    novaChaveIdempotencia: string,
-  ): Promise<void>;
+  ): Promise<string>;
 }

@@ -13,6 +13,55 @@ describe('OwnershipGuard', () => {
   const reflector = { getAllAndOverride: jest.fn() } as unknown as Reflector;
   const guard = new OwnershipGuard(reflector, prisma as never);
 
+  it('libera quando rota não declara ownership', async () => {
+    reflector.getAllAndOverride = jest.fn().mockReturnValue(undefined);
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { perfil: 'CLIENTE' }, params: {} }),
+      }),
+    } as never;
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+
+  it('libera usuário não-cliente mesmo com ownership', async () => {
+    reflector.getAllAndOverride = jest
+      .fn()
+      .mockReturnValue(OwnershipResource.ORCAMENTO);
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: { perfil: 'ADMINISTRADOR' },
+          params: { id: 'orc-1' },
+        }),
+      }),
+    } as never;
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(prisma.orcamento.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('nega cliente sem id de recurso', async () => {
+    reflector.getAllAndOverride = jest
+      .fn()
+      .mockReturnValue(OwnershipResource.ORCAMENTO);
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: { sub: 'c1', tipo: 'CLIENTE', perfil: 'CLIENTE' },
+          params: {},
+        }),
+      }),
+    } as never;
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('libera atendente sem checar posse', async () => {
     reflector.getAllAndOverride = jest
       .fn()

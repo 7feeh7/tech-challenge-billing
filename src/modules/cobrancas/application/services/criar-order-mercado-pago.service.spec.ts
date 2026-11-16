@@ -87,6 +87,7 @@ function montarServico(
       ...(overrides.mercadoPago ?? {}),
     } as unknown as MercadoPagoGateway,
     outbox,
+    { existe: jest.fn().mockResolvedValue(false) },
     'comprador@example.com',
   );
 
@@ -112,11 +113,14 @@ describe('CriarOrderMercadoPagoService', () => {
     };
     const servico = new CriarOrderMercadoPagoService(
       new UnitOfWorkFake(),
-      { buscarPorId: jest.fn().mockResolvedValue(cobranca) } as unknown as CobrancaGateway,
+      {
+        buscarPorId: jest.fn().mockResolvedValue(cobranca),
+      } as unknown as CobrancaGateway,
       {} as OperacaoCriacaoOrderGateway,
       {} as OrderMercadoPagoGateway,
       mercadoPago,
       { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
       'comprador@example.com',
     );
     await servico.executar('c1');
@@ -130,11 +134,14 @@ describe('CriarOrderMercadoPagoService', () => {
     };
     const servico = new CriarOrderMercadoPagoService(
       new UnitOfWorkFake(),
-      { buscarPorId: jest.fn().mockResolvedValue(null) } as unknown as CobrancaGateway,
+      {
+        buscarPorId: jest.fn().mockResolvedValue(null),
+      } as unknown as CobrancaGateway,
       {} as OperacaoCriacaoOrderGateway,
       {} as OrderMercadoPagoGateway,
       mercadoPago,
       { registrar: jest.fn() },
+      { existe: jest.fn().mockResolvedValue(false) },
       'comprador@example.com',
     );
     await servico.executar('c1');

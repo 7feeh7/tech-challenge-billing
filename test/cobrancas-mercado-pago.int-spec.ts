@@ -34,6 +34,8 @@ describe('Cobranças — Mercado Pago (integração)', () => {
       status: 'action_required',
       statusDetail: 'waiting_for_payment',
     }),
+    cancelarOrder: jest.fn(),
+    estornarTotal: jest.fn(),
     consultarOrder: jest.fn().mockResolvedValue({
       tipo: 'sucesso',
       order: {
