@@ -8,8 +8,10 @@ import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import { EVENTO_ORCAMENTO_GERADO } from '../src/shared/messaging/envelope';
 import { MensageriaModule } from '../src/shared/messaging/mensageria.module';
-
-const databaseUrl = process.env.DATABASE_URL;
+import {
+  exigirDatabaseUrl,
+  verificarConexaoPostgres,
+} from './helpers/exigir-database-integracao';
 
 describe('Gerar orçamento (integração PostgreSQL)', () => {
   let prisma: PrismaService;
@@ -26,9 +28,7 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
   );
 
   beforeAll(async () => {
-    if (!databaseUrl) {
-      return;
-    }
+    exigirDatabaseUrl();
 
     const module = await Test.createTestingModule({
       imports: [
@@ -50,7 +50,7 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
     prisma = module.get(PrismaService);
     processar = module.get(ProcessarGerarOrcamentoUseCase);
 
-    await prisma.$executeRawUnsafe('SELECT 1');
+    await verificarConexaoPostgres(() => prisma.$queryRaw`SELECT 1`);
   });
 
   afterAll(async () => {
@@ -58,24 +58,13 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
   });
 
   beforeEach(async () => {
-    if (!databaseUrl || !prisma) return;
     await prisma.mensagemOutbox.deleteMany();
     await prisma.mensagemProcessada.deleteMany();
     await prisma.orcamentoItem.deleteMany();
     await prisma.orcamento.deleteMany();
   });
 
-  const pularSemBanco = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: teste de integração ignorado.');
-      return true;
-    }
-    return false;
-  };
-
   it('persiste orçamento com valor soma dos itens e evento na outbox', async () => {
-    if (pularSemBanco()) return;
-
     await processar.processar(exemplo);
 
     const orcamentos = await prisma.orcamento.findMany({
@@ -91,8 +80,6 @@ describe('Gerar orçamento (integração PostgreSQL)', () => {
   });
 
   it('repetição do comando não cria segundo orçamento', async () => {
-    if (pularSemBanco()) return;
-
     await processar.processar(exemplo);
     await processar.processar(exemplo);
 

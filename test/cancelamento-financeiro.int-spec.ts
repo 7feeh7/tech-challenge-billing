@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ConfigModule } from '@nestjs/config';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import type { OperacaoFinanceiraGateway } from '../src/modules/cancelamento-financeiro/application/ports/operacao-financeira.gateway';
 import { OPERACAO_FINANCEIRA_GATEWAY } from '../src/modules/cancelamento-financeiro/application/ports/tokens';
 import { ExecutarCancelamentoFinanceiroService } from '../src/modules/cancelamento-financeiro/application/services/executar-cancelamento-financeiro.service';
@@ -19,10 +19,10 @@ import { PrismaService } from '../src/shared/database/prisma.service';
 import type { UnitOfWork } from '../src/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '../src/shared/database/unit-of-work.port';
 import { EVENTO_CANCELAR_FINANCEIRO } from '../src/shared/messaging/envelope';
-
-const databaseUrl = process.env.DATABASE_URL;
+import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 
 describe('Cancelamento financeiro (integração)', () => {
+  let nestModule: TestingModule | undefined;
   let prisma: PrismaService;
   let uow: UnitOfWork;
   let cobrancas: CobrancaGateway;
@@ -44,18 +44,16 @@ describe('Cancelamento financeiro (integração)', () => {
     }),
   };
 
-  const pular = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: testes de cancelamento ignorados.');
-      return true;
-    }
-    return false;
-  };
+  beforeAll(() => {
+    exigirDatabaseUrl();
+  });
 
   beforeEach(async () => {
-    if (pular()) return;
+    if (nestModule) {
+      await nestModule.close();
+    }
 
-    const module = await Test.createTestingModule({
+    nestModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
@@ -63,6 +61,10 @@ describe('Cancelamento financeiro (integração)', () => {
             () => ({
               OUTBOX_PUBLISHER_HABILITADO: 'false',
               SQS_CONSUMER_HABILITADO: 'false',
+              COBRANCA_CRIACAO_PROCESSADOR_HABILITADO: 'false',
+              COBRANCA_CONCILIACAO_PROCESSADOR_HABILITADO: 'false',
+              CANCELAMENTO_FINANCEIRO_PROCESSADOR_HABILITADO: 'false',
+              APROVACAO_PROCESSADOR_HABILITADO: 'false',
             }),
           ],
         }),
@@ -74,12 +76,12 @@ describe('Cancelamento financeiro (integração)', () => {
       .useValue(mpMock)
       .compile();
 
-    prisma = module.get(PrismaService);
-    uow = module.get(UNIT_OF_WORK);
-    cobrancas = module.get(COBRANCA_GATEWAY);
-    operacoes = module.get(OPERACAO_FINANCEIRA_GATEWAY);
-    processar = module.get(ProcessarCancelarFinanceiroUseCase);
-    executar = module.get(ExecutarCancelamentoFinanceiroService);
+    prisma = nestModule.get(PrismaService);
+    uow = nestModule.get(UNIT_OF_WORK);
+    cobrancas = nestModule.get(COBRANCA_GATEWAY);
+    operacoes = nestModule.get(OPERACAO_FINANCEIRA_GATEWAY);
+    processar = nestModule.get(ProcessarCancelarFinanceiroUseCase);
+    executar = nestModule.get(ExecutarCancelamentoFinanceiroService);
 
     await prisma.pendenciaEstorno.deleteMany();
     await prisma.operacaoFinanceira.deleteMany();
@@ -95,9 +97,12 @@ describe('Cancelamento financeiro (integração)', () => {
     await prisma.mensagemProcessada.deleteMany();
   });
 
-  it('fase 1 cria bloqueio e operação; fase 2 cancela cobrança pendente', async () => {
-    if (pular()) return;
+  afterAll(async () => {
+    await nestModule?.close();
+    await prisma?.$disconnect();
+  });
 
+  it('fase 1 cria bloqueio e operação; fase 2 cancela cobrança pendente', async () => {
     const osId = randomUUID();
     const orcamentoId = randomUUID();
     const correlationId = randomUUID();

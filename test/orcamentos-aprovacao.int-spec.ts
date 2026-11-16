@@ -14,8 +14,7 @@ import {
   encerrarDublê,
   iniciarDublêOsReservas,
 } from './helpers/dublê-os-reservas';
-
-const databaseUrl = process.env.DATABASE_URL;
+import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 
 describe('Orçamentos — aprovação com reserva (integração)', () => {
   let prisma: PrismaService;
@@ -32,8 +31,8 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
     ),
   );
 
-  beforeAll(async () => {
-    if (!databaseUrl) return;
+  beforeAll(() => {
+    exigirDatabaseUrl();
   });
 
   afterAll(async () => {
@@ -41,7 +40,6 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   });
 
   beforeEach(async () => {
-    if (!databaseUrl) return;
     if (prisma) {
       await prisma.cobranca.deleteMany();
       await prisma.mensagemOutbox.deleteMany();
@@ -50,14 +48,6 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
       await prisma.orcamento.deleteMany();
     }
   });
-
-  const pular = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: testes de aprovação ignorados.');
-      return true;
-    }
-    return false;
-  };
 
   async function montarModulo(osUrl: string, timeoutMs: string) {
     const module = await Test.createTestingModule({
@@ -110,7 +100,6 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   }
 
   it('aprova com reserva confirmada e persiste intenção de cobrança', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('sucesso');
     try {
       await montarModulo(dublê.url, '3000');
@@ -130,7 +119,6 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   });
 
   it('retorna 409 de estoque e mantém orçamento aguardando em GERADO', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('estoque');
     try {
       await montarModulo(dublê.url, '3000');
@@ -157,7 +145,6 @@ describe('Orçamentos — aprovação com reserva (integração)', () => {
   });
 
   it('timeout na reserva responde 202 e consulta subsequente não duplica operação', async () => {
-    if (pular()) return;
     const dublê = await iniciarDublêOsReservas('timeout');
     try {
       await montarModulo(dublê.url, '50');

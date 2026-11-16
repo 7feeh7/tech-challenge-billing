@@ -16,8 +16,7 @@ import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import type { UnitOfWork } from '../src/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '../src/shared/database/unit-of-work.port';
-
-const databaseUrl = process.env.DATABASE_URL;
+import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 
 describe('Cobranças — Mercado Pago (integração)', () => {
   let prisma: PrismaService;
@@ -53,17 +52,11 @@ describe('Cobranças — Mercado Pago (integração)', () => {
     }),
   };
 
-  const pular = () => {
-    if (!databaseUrl) {
-      console.warn('DATABASE_URL ausente: testes de cobrança MP ignorados.');
-      return true;
-    }
-    return false;
-  };
+  beforeAll(() => {
+    exigirDatabaseUrl();
+  });
 
   beforeEach(async () => {
-    if (pular()) return;
-
     const module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -107,8 +100,6 @@ describe('Cobranças — Mercado Pago (integração)', () => {
   });
 
   it('cria order, publica CobrancaCriada e confirma pagamento por consulta', async () => {
-    if (pular()) return;
-
     const orcamentoId = randomUUID();
     const ordemServicoId = randomUUID();
     const clienteId = randomUUID();
