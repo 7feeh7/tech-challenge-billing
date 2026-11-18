@@ -10,7 +10,10 @@ import { interpretarSituacaoFinanceira } from '@/modules/cobrancas/domain/interp
 import { SituacaoCobranca } from '@/modules/cobrancas/domain/situacao-cobranca';
 import type { OrcamentoGateway } from '@/modules/orcamentos/application/ports/orcamento.gateway';
 import { SituacaoOrcamento } from '@/modules/orcamentos/domain/situacao-orcamento';
-import type { UnitOfWork } from '@/shared/database/unit-of-work.port';
+import type {
+  ContextoTransacao,
+  UnitOfWork,
+} from '@/shared/database/unit-of-work.port';
 import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.gateway';
 import {
   DESTINO_FILA_OS,
@@ -94,10 +97,7 @@ export class ExecutarCancelamentoFinanceiroService {
       return;
     }
 
-    if (
-      cobranca.situacao === SituacaoCobranca.PENDENTE ||
-      cobranca.situacao === SituacaoCobranca.INTENCAO
-    ) {
+    if (this.semPagamento(cobranca)) {
       const ok = await this.cancelarCobrancaNaoPaga(operacao, cobranca);
       if (!ok) return;
       await this.concluirOperacao(operacao, cobranca.id, 'CANCELADA', null);
@@ -153,6 +153,14 @@ export class ExecutarCancelamentoFinanceiroService {
     return null;
   }
 
+  private semPagamento(cobranca: Cobranca): boolean {
+    return (
+      cobranca.situacao === SituacaoCobranca.INTENCAO ||
+      cobranca.situacao === SituacaoCobranca.PENDENTE ||
+      cobranca.situacao === SituacaoCobranca.EXPIRADA
+    );
+  }
+
   private async cancelarCobrancaNaoPaga(
     operacao: OperacaoFinanceiraRegistro,
     cobranca: Cobranca,
@@ -161,11 +169,9 @@ export class ExecutarCancelamentoFinanceiroService {
       cobranca.id as string,
     );
     if (!order) {
-      await this.unitOfWork.executar(async (ctx) => {
-        const copia = this.clonar(cobranca);
-        copia.marcarCancelada();
-        await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
-      });
+      await this.unitOfWork.executar((ctx) =>
+        this.marcarCanceladaSeAindaAberta(ctx, cobranca),
+      );
       return true;
     }
 
@@ -210,14 +216,25 @@ export class ExecutarCancelamentoFinanceiroService {
     }
 
     await this.unitOfWork.executar(async (ctx) => {
-      const copia = this.clonar(cobranca);
-      copia.marcarCancelada();
-      await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
+      await this.marcarCanceladaSeAindaAberta(ctx, cobranca);
       if (order.id) {
         await this.orders.desativar(ctx, order.id);
       }
     });
     return true;
+  }
+
+  // A cobrança expirada já está encerrada sem pagamento e o OS já recebeu
+  // CobrancaExpirada; regravá-la como CANCELADA apagaria esse fato.
+  private async marcarCanceladaSeAindaAberta(
+    ctx: ContextoTransacao,
+    cobranca: Cobranca,
+  ): Promise<void> {
+    if (cobranca.situacao === SituacaoCobranca.EXPIRADA) return;
+
+    const copia = this.clonar(cobranca);
+    copia.marcarCancelada();
+    await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
   }
 
   private async confirmarCancelamentoPorGet(orderId: string): Promise<boolean> {

@@ -729,4 +729,175 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
     expect(operacoes.adiarProcessamento).toHaveBeenCalled();
     expect(operacoes.concluir).not.toHaveBeenCalled();
   });
+
+  describe('cobrança EXPIRADA', () => {
+    const cobrancaExpirada = new Cobranca({
+      ...cobrancaPendente,
+      situacao: SituacaoCobranca.EXPIRADA,
+    });
+    const orderAtiva = { id: 'omp1', mercadoPagoOrderId: 'ORD1' };
+
+    function criarServicoComCobrancaExpirada(
+      deps: Parameters<typeof criarServico>[0] = {},
+    ) {
+      return criarServico({
+        ...deps,
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaExpirada),
+          buscarPorId: jest.fn().mockResolvedValue(cobrancaExpirada),
+          atualizar: jest.fn(),
+        },
+      });
+    }
+
+    it('conclui como CANCELADA sem order ativa e sem chamar o Mercado Pago', async () => {
+      const mp = { cancelarOrder: jest.fn(), consultarOrder: jest.fn() };
+      const { servico, operacoes, cobrancas, outboxRegistros } =
+        criarServicoComCobrancaExpirada({ mp });
+
+      await servico.executar('op1');
+
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        expect.objectContaining({
+          cobrancaId: 'c1',
+          resultado: 'CANCELADA',
+          pendenciaId: null,
+        }),
+      );
+      expect(outboxRegistros).toEqual([EVENTO_RESPOSTA_CANCELAMENTO]);
+      expect(cobrancas.atualizar).not.toHaveBeenCalled();
+      expect(mp.cancelarOrder).not.toHaveBeenCalled();
+    });
+
+    it('cancela a order ativa e conclui como CANCELADA', async () => {
+      const mp = {
+        cancelarOrder: jest.fn().mockResolvedValue({ tipo: 'sucesso' }),
+        consultarOrder: jest.fn().mockResolvedValue({
+          tipo: 'sucesso',
+          order: { id: 'ORD1', status: 'canceled', pagamentos: [] },
+        }),
+      };
+      const orders = {
+        buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+        desativar: jest.fn(),
+      };
+      const { servico, operacoes, cobrancas, outboxRegistros } =
+        criarServicoComCobrancaExpirada({ mp, orders });
+
+      await servico.executar('op1');
+
+      expect(mp.cancelarOrder).toHaveBeenCalledWith('ORD1', 'chave-mp');
+      expect(orders.desativar).toHaveBeenCalledWith(expect.anything(), 'omp1');
+      expect(cobrancas.atualizar).not.toHaveBeenCalled();
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        expect.objectContaining({ resultado: 'CANCELADA' }),
+      );
+      expect(outboxRegistros).toEqual([EVENTO_RESPOSTA_CANCELAMENTO]);
+    });
+
+    it.each([
+      ['canceled', undefined],
+      ['expired', undefined],
+      ['canceled', 'expired'],
+    ])(
+      'após 409 cannot_cancel_order conclui como CANCELADA quando a consulta devolve status %s e detalhe %s',
+      async (status, statusDetail) => {
+        const mp = {
+          cancelarOrder: jest.fn().mockResolvedValue({
+            tipo: 'conflito_especifico',
+            codigo: 'cannot_cancel_order',
+          }),
+          consultarOrder: jest.fn().mockResolvedValue({
+            tipo: 'sucesso',
+            order: { id: 'ORD1', status, statusDetail, pagamentos: [] },
+          }),
+        };
+        const orders = {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+          desativar: jest.fn(),
+        };
+        const { servico, operacoes, cobrancas, outboxRegistros } =
+          criarServicoComCobrancaExpirada({ mp, orders });
+
+        await servico.executar('op1');
+
+        expect(mp.consultarOrder).toHaveBeenCalledWith('ORD1');
+        expect(cobrancas.atualizar).not.toHaveBeenCalled();
+        expect(operacoes.concluir).toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          expect.objectContaining({ resultado: 'CANCELADA' }),
+        );
+        expect(outboxRegistros).toEqual([EVENTO_RESPOSTA_CANCELAMENTO]);
+      },
+    );
+
+    it('não conclui como CANCELADA quando a consulta após o 409 mostra order paga', async () => {
+      const mp = {
+        cancelarOrder: jest.fn().mockResolvedValue({
+          tipo: 'conflito_especifico',
+          codigo: 'cannot_cancel_order',
+        }),
+        consultarOrder: jest.fn().mockResolvedValue({
+          tipo: 'sucesso',
+          order: {
+            id: 'ORD1',
+            status: 'processed',
+            pagamentos: [{ id: 'PAY1', status: 'approved' }],
+          },
+        }),
+      };
+      const { servico, operacoes, outboxRegistros } =
+        criarServicoComCobrancaExpirada({
+          mp,
+          orders: {
+            buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+          },
+        });
+
+      await servico.executar('op1');
+
+      expect(operacoes.concluir).not.toHaveBeenCalled();
+      expect(operacoes.adiarProcessamento).toHaveBeenCalled();
+      expect(outboxRegistros).toEqual([]);
+    });
+
+    it('reprocessar a operação já concluída não cancela nem responde de novo', async () => {
+      let situacao: 'EM_ANDAMENTO' | 'CONCLUIDA' = 'EM_ANDAMENTO';
+      const mp = {
+        cancelarOrder: jest.fn().mockResolvedValue({ tipo: 'sucesso' }),
+        consultarOrder: jest.fn().mockResolvedValue({
+          tipo: 'sucesso',
+          order: { id: 'ORD1', status: 'canceled', pagamentos: [] },
+        }),
+      };
+      const { servico, operacoes, outboxRegistros } =
+        criarServicoComCobrancaExpirada({
+          mp,
+          operacoes: {
+            buscarPorId: jest.fn(async () => ({ ...operacaoBase, situacao })),
+            concluir: jest.fn(async () => {
+              situacao = 'CONCLUIDA';
+            }),
+          },
+          orders: {
+            buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+            desativar: jest.fn(),
+          },
+        });
+
+      await servico.executar('op1');
+      await servico.executar('op1');
+
+      expect(operacoes.concluir).toHaveBeenCalledTimes(1);
+      expect(mp.cancelarOrder).toHaveBeenCalledTimes(1);
+      expect(outboxRegistros).toEqual([EVENTO_RESPOSTA_CANCELAMENTO]);
+    });
+  });
 });
