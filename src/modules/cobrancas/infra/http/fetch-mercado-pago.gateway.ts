@@ -1,5 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  type MotivoFalhaTecnicaMercadoPago,
+  type OperacaoMercadoPago,
+  serializarFalhaTecnicaMercadoPago,
+} from '@/shared/observability/metrica-log';
 import type {
   CriarOrderMercadoPagoInput,
   MercadoPagoGateway,
@@ -15,6 +20,8 @@ import type {
 
 @Injectable()
 export class FetchMercadoPagoGateway implements MercadoPagoGateway {
+  private readonly logger = new Logger(FetchMercadoPagoGateway.name);
+
   constructor(private readonly config: ConfigService) {}
 
   async criarOrder(
@@ -22,6 +29,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
   ): Promise<ResultadoCriarOrderMercadoPago> {
     const token = this.config.get<string>('MP_ACCESS_TOKEN')?.trim();
     if (!token) {
+      this.registrarFalhaTecnica('criar_order', 'token_ausente');
       return {
         tipo: 'indeterminado',
         motivo: 'MP_ACCESS_TOKEN não configurado',
@@ -54,7 +62,8 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
 
       const parsed = await this.parseJson(resposta);
       if (!resposta.ok) {
-        if (resposta.status >= 500 || resposta.status === 408) {
+        if (this.ehStatusDeFalhaTecnica(resposta.status)) {
+          this.registrarFalhaTecnicaHttp('criar_order', resposta.status);
           return {
             tipo: 'indeterminado',
             motivo: `HTTP ${resposta.status}`,
@@ -72,6 +81,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
           ? parsed.checkout_url
           : undefined;
       if (!orderId || !checkoutUrl) {
+        this.registrarFalhaTecnica('criar_order', 'resposta_invalida');
         return {
           tipo: 'indeterminado',
           motivo: 'Resposta sem order id ou checkout_url',
@@ -89,6 +99,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
             : undefined,
       };
     } catch (erro) {
+      this.registrarFalhaTecnica('criar_order', this.motivoDoErro(erro));
       return {
         tipo: 'indeterminado',
         motivo:
@@ -102,6 +113,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
     idempotencyKey: string,
   ): Promise<ResultadoCancelarOrderMercadoPago> {
     return this.postOrderAcao(
+      'cancelar_order',
       `/v1/orders/${orderId}/cancel`,
       idempotencyKey,
     ) as Promise<ResultadoCancelarOrderMercadoPago>;
@@ -112,6 +124,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
     idempotencyKey: string,
   ): Promise<ResultadoEstornarTotalMercadoPago> {
     return this.postOrderAcao(
+      'estornar_total',
       `/v1/orders/${orderId}/refund`,
       idempotencyKey,
     ) as Promise<ResultadoEstornarTotalMercadoPago>;
@@ -122,6 +135,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
   ): Promise<ResultadoConsultarOrderMercadoPago> {
     const token = this.config.get<string>('MP_ACCESS_TOKEN')?.trim();
     if (!token) {
+      this.registrarFalhaTecnica('consultar_order', 'token_ausente');
       return {
         tipo: 'indeterminado',
         motivo: 'MP_ACCESS_TOKEN não configurado',
@@ -137,6 +151,9 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
 
       const parsed = await this.parseJson(resposta);
       if (!resposta.ok) {
+        if (this.ehStatusDeFalhaTecnica(resposta.status)) {
+          this.registrarFalhaTecnicaHttp('consultar_order', resposta.status);
+        }
         return {
           tipo: 'indeterminado',
           motivo: `HTTP ${resposta.status}`,
@@ -148,6 +165,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
         order: this.mapearOrder(parsed, orderId),
       };
     } catch (erro) {
+      this.registrarFalhaTecnica('consultar_order', this.motivoDoErro(erro));
       return {
         tipo: 'indeterminado',
         motivo:
@@ -204,6 +222,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
   }
 
   private async postOrderAcao(
+    operacao: OperacaoMercadoPago,
     caminho: string,
     idempotencyKey: string,
   ): Promise<
@@ -213,6 +232,7 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
   > {
     const token = this.config.get<string>('MP_ACCESS_TOKEN')?.trim();
     if (!token) {
+      this.registrarFalhaTecnica(operacao, 'token_ausente');
       return {
         tipo: 'indeterminado',
         motivo: 'MP_ACCESS_TOKEN não configurado',
@@ -249,7 +269,8 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
         };
       }
 
-      if (resposta.status >= 500 || resposta.status === 408) {
+      if (this.ehStatusDeFalhaTecnica(resposta.status)) {
+        this.registrarFalhaTecnicaHttp(operacao, resposta.status);
         return {
           tipo: 'indeterminado',
           motivo: `HTTP ${resposta.status}`,
@@ -261,12 +282,43 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
         motivo: `HTTP ${resposta.status}: erro de negócio`,
       };
     } catch (erro) {
+      this.registrarFalhaTecnica(operacao, this.motivoDoErro(erro));
       return {
         tipo: 'indeterminado',
         motivo:
           erro instanceof Error ? erro.message : 'Erro na requisição à order',
       };
     }
+  }
+
+  private ehStatusDeFalhaTecnica(status: number): boolean {
+    return status >= 500 || status === 408;
+  }
+
+  private registrarFalhaTecnicaHttp(
+    operacao: OperacaoMercadoPago,
+    statusHttp: number,
+  ): void {
+    const motivo = statusHttp === 408 ? 'timeout' : 'http_5xx';
+    this.registrarFalhaTecnica(operacao, motivo, statusHttp);
+  }
+
+  // O fetch com AbortSignal.timeout rejeita com TimeoutError; qualquer outra
+  // rejeição é falha de conexão. O nome é lido sem instanceof porque o
+  // DOMException pode vir de outro contexto de execução (ex.: sandbox do Jest).
+  private motivoDoErro(erro: unknown): MotivoFalhaTecnicaMercadoPago {
+    const nome = (erro as { name?: unknown } | null)?.name;
+    return nome === 'TimeoutError' ? 'timeout' : 'rede';
+  }
+
+  private registrarFalhaTecnica(
+    operacao: OperacaoMercadoPago,
+    motivo: MotivoFalhaTecnicaMercadoPago,
+    statusHttp?: number,
+  ): void {
+    this.logger.warn(
+      serializarFalhaTecnicaMercadoPago({ operacao, motivo, statusHttp }),
+    );
   }
 
   private extrairCodigoConflito409(

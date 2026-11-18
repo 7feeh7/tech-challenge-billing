@@ -18,7 +18,7 @@ Cada sinal é uma linha de log cujo `message` é um JSON com `metric` e o contex
 }
 ```
 
-Campos de contexto: `ordemServicoId`, `rodada`, `correlationId`, `operacaoId`, `cobrancaId` e `motivo`. Só `undefined` é omitido do JSON; `null` sai como `null`. Nos dois sinais novos o `motivo` é um código fixo. Nunca entram dados pessoais, tokens nem valores financeiros: apenas esses campos são serializados.
+Campos de contexto: `ordemServicoId`, `rodada`, `correlationId`, `operacaoId`, `cobrancaId` e `motivo`. Só `undefined` é omitido do JSON; `null` sai como `null`. Nos dois sinais novos o `motivo` é um código fixo. O sinal `billing.mercado_pago.falha_tecnica` tem formato próprio, descrito na seção dedicada abaixo. Nunca entram dados pessoais, tokens nem valores financeiros: apenas esses campos são serializados.
 
 Como o JSON chega dentro de `message`, o pipeline de logs do Datadog precisa de um _Grok parser_ com `%{data::json}` sobre o `message` para que `@metric` e os demais campos virem atributos pesquisáveis. Sem esse parser, a consulta e a `datadog_logs_metric` abaixo não encontram os eventos.
 
@@ -28,9 +28,10 @@ O `service` dos logs é `billing-api` (autodiscovery em `k8s/deployment.yaml`; o
 
 | `metric`                                    | Nível  | Significado                                                                                                                                                   | `motivo`                                                                                                    |
 | ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `billing.situacao_financeira_indeterminada` | `info` | A consulta da situação financeira de uma cobrança terminou sem resposta conclusiva do Mercado Pago e foi registrada em `PendenciaFinanceiraMonitoramento`.    | Vem da consulta (comportamento anterior) e pode ser texto livre do erro do gateway                                                                                   |
+| `billing.situacao_financeira_indeterminada` | `info` | A consulta da situação financeira de uma cobrança terminou sem resposta conclusiva do Mercado Pago e foi registrada em `PendenciaFinanceiraMonitoramento`.    | Vem da consulta (comportamento anterior) e pode ser texto livre do erro do gateway                          |
 | `billing.operacao_financeira_indeterminada` | `warn` | Uma operação de cancelamento financeiro esgotou as tentativas com a mesma chave de idempotência e o resultado no Mercado Pago continua indeterminado (D3.15). | `tentativas_esgotadas`                                                                                      |
 | `billing.pendencia_estorno_aberta`          | `warn` | Uma pendência manual de estorno foi criada e a cobrança passou a `PENDENCIA_MANUAL`.                                                                          | `reparo_iniciado` (cobrança paga com reparo já iniciado) ou `operacao_indeterminada` (tentativas esgotadas) |
+| `billing.mercado_pago.falha_tecnica`        | `warn` | Uma chamada HTTP ao Mercado Pago falhou tecnicamente e o gateway devolveu `indeterminado`. Ver a seção abaixo.                                                | `timeout`, `rede`, `http_5xx`, `resposta_invalida` ou `token_ausente` (ver seção abaixo)                    |
 
 ## Consultas Datadog sugeridas
 
@@ -38,9 +39,41 @@ O `service` dos logs é `billing-api` (autodiscovery em `k8s/deployment.yaml`; o
 service:billing-api @metric:billing.situacao_financeira_indeterminada
 service:billing-api @metric:billing.operacao_financeira_indeterminada
 service:billing-api @metric:billing.pendencia_estorno_aberta
+service:billing-api @metric:billing.mercado_pago.falha_tecnica
 ```
 
 Cada `datadog_logs_metric` pode usar essa consulta como filtro, com agregação `count` e, se útil, agrupamento por `@motivo`. Evite agrupar por `@ordemServicoId`, `@correlationId`, `@operacaoId` ou `@cobrancaId` na métrica, pois têm cardinalidade alta; use-os na busca de logs para investigar.
+
+## Falha técnica no Mercado Pago
+
+O `FetchMercadoPagoGateway` emite `billing.mercado_pago.falha_tecnica` (nível `warn`) quando uma chamada ao Mercado Pago falha por motivo técnico e o gateway devolve `indeterminado`. É o sinal do monitor "Falha técnica no Mercado Pago" (E35). O Billing não tem APM; o sinal é só este log.
+
+```json
+{
+  "metric": "billing.mercado_pago.falha_tecnica",
+  "operacao": "criar_order",
+  "motivo": "http_5xx",
+  "statusHttp": 503
+}
+```
+
+| Campo        | Valores                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| `operacao`   | `criar_order`, `consultar_order`, `cancelar_order`, `estornar_total`                          |
+| `motivo`     | `timeout`, `rede`, `http_5xx`, `resposta_invalida`, `token_ausente`                           |
+| `statusHttp` | Só quando há resposta HTTP (`http_5xx` e `timeout` por HTTP 408). Omitido nos demais motivos. |
+
+Significado dos `motivo`:
+
+- `timeout`: o `fetch` estourou `MP_REQUEST_TIMEOUT_MS` (`TimeoutError`) ou o Mercado Pago respondeu HTTP 408.
+- `rede`: o `fetch` rejeitou por outro motivo (conexão recusada ou resetada, DNS).
+- `http_5xx`: o Mercado Pago respondeu HTTP 5xx.
+- `resposta_invalida`: a criação de order respondeu com sucesso, mas sem `id` ou `checkout_url`.
+- `token_ausente`: `MP_ACCESS_TOKEN` não está configurado. Não há chamada HTTP; todas as operações falham até corrigir a configuração.
+
+Não são falha técnica, e portanto não emitem o sinal: recusa de pagamento, HTTP 4xx, exceto 408 (inclusive "erro de negócio" e HTTP 409, com ou sem código reconhecido) e qualquer resposta de sucesso. Corpo de resposta, mensagem de erro, token, URL, dados do pagador, valores e identificadores nunca entram no log.
+
+Regra de contagem: um log por chamada HTTP com falha técnica, inclusive nas retentativas feitas por jobs ou por reprocessamento de mensagem. A exceção é `token_ausente`, um log por tentativa de operação, pois nenhuma chamada HTTP chega a sair. Uma mesma cobrança com Mercado Pago fora do ar gera um log a cada tentativa. Agrupe por `@operacao` ou `@motivo`; não há identificador da cobrança no sinal.
 
 ## Contagem e repetições
 

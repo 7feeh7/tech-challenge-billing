@@ -4,6 +4,7 @@ export const METRICA_LOG = {
   PENDENCIA_ESTORNO_ABERTA: 'billing.pendencia_estorno_aberta',
   OPERACAO_FINANCEIRA_INDETERMINADA:
     'billing.operacao_financeira_indeterminada',
+  MERCADO_PAGO_FALHA_TECNICA: 'billing.mercado_pago.falha_tecnica',
 } as const;
 
 export type MetricaLog = (typeof METRICA_LOG)[keyof typeof METRICA_LOG];
@@ -31,5 +32,37 @@ export function serializarMetricaLog(
     operacaoId: contexto.operacaoId,
     cobrancaId: contexto.cobrancaId,
     motivo: contexto.motivo,
+  });
+}
+
+export type OperacaoMercadoPago =
+  | 'criar_order'
+  | 'consultar_order'
+  | 'cancelar_order'
+  | 'estornar_total';
+
+export type MotivoFalhaTecnicaMercadoPago =
+  | 'timeout'
+  | 'rede'
+  | 'http_5xx'
+  | 'resposta_invalida'
+  | 'token_ausente';
+
+export interface ContextoFalhaTecnicaMercadoPago {
+  operacao: OperacaoMercadoPago;
+  motivo: MotivoFalhaTecnicaMercadoPago;
+  statusHttp?: number;
+}
+
+// Sem identificadores da chamada: a métrica agrupa por operação e motivo, e
+// corpo de resposta, mensagem de erro e URL poderiam expor dados sensíveis.
+export function serializarFalhaTecnicaMercadoPago(
+  contexto: ContextoFalhaTecnicaMercadoPago,
+): string {
+  return JSON.stringify({
+    metric: METRICA_LOG.MERCADO_PAGO_FALHA_TECNICA,
+    operacao: contexto.operacao,
+    motivo: contexto.motivo,
+    statusHttp: contexto.statusHttp,
   });
 }

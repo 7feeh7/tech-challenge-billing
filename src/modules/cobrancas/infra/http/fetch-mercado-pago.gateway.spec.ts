@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { FetchMercadoPagoGateway } from './fetch-mercado-pago.gateway';
 
 describe('FetchMercadoPagoGateway', () => {
@@ -380,5 +381,260 @@ describe('FetchMercadoPagoGateway', () => {
       payerEmail: 'a@b.com',
     });
     expect(resultado.tipo).toBe('indeterminado');
+  });
+
+  describe('sinal billing.mercado_pago.falha_tecnica', () => {
+    const inputCriarOrder = {
+      externalReference: 'c1',
+      totalAmount: '10.00',
+      expirationTime: 'PT15M',
+      idempotencyKey: 'k1',
+      payerEmail: 'a@b.com',
+    };
+
+    const operacoes = [
+      {
+        operacao: 'criar_order',
+        executar: (gateway: FetchMercadoPagoGateway) =>
+          gateway.criarOrder(inputCriarOrder),
+      },
+      {
+        operacao: 'consultar_order',
+        executar: (gateway: FetchMercadoPagoGateway) =>
+          gateway.consultarOrder('ORD1'),
+      },
+      {
+        operacao: 'cancelar_order',
+        executar: (gateway: FetchMercadoPagoGateway) =>
+          gateway.cancelarOrder('ORD1', 'k1'),
+      },
+      {
+        operacao: 'estornar_total',
+        executar: (gateway: FetchMercadoPagoGateway) =>
+          gateway.estornarTotal('ORD1', 'k1'),
+      },
+    ];
+
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    });
+
+    function sinaisEmitidos(): unknown[] {
+      return warn.mock.calls.map(([mensagem]) => JSON.parse(mensagem));
+    }
+
+    function responder(status: number, corpo = '{}'): void {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => corpo,
+      } as Response);
+    }
+
+    it.each(operacoes)(
+      '$operacao: emite um sinal http_5xx com o status HTTP',
+      async ({ operacao, executar }) => {
+        responder(503);
+
+        const resultado = await executar(
+          new FetchMercadoPagoGateway(config as never),
+        );
+
+        expect(resultado.tipo).toBe('indeterminado');
+        expect(sinaisEmitidos()).toEqual([
+          {
+            metric: 'billing.mercado_pago.falha_tecnica',
+            operacao,
+            motivo: 'http_5xx',
+            statusHttp: 503,
+          },
+        ]);
+      },
+    );
+
+    it.each(operacoes)(
+      '$operacao: emite um sinal timeout quando o fetch estoura o tempo',
+      async ({ operacao, executar }) => {
+        jest
+          .spyOn(global, 'fetch')
+          .mockRejectedValue(
+            new DOMException('The operation timed out.', 'TimeoutError'),
+          );
+
+        await executar(new FetchMercadoPagoGateway(config as never));
+
+        expect(sinaisEmitidos()).toEqual([
+          {
+            metric: 'billing.mercado_pago.falha_tecnica',
+            operacao,
+            motivo: 'timeout',
+          },
+        ]);
+      },
+    );
+
+    it.each(operacoes)(
+      '$operacao: emite um sinal rede em erro de conexão',
+      async ({ operacao, executar }) => {
+        jest.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNRESET'));
+
+        await executar(new FetchMercadoPagoGateway(config as never));
+
+        expect(sinaisEmitidos()).toEqual([
+          {
+            metric: 'billing.mercado_pago.falha_tecnica',
+            operacao,
+            motivo: 'rede',
+          },
+        ]);
+      },
+    );
+
+    it.each(operacoes)(
+      '$operacao: emite um sinal token_ausente sem chamar o Mercado Pago',
+      async ({ operacao, executar }) => {
+        const fetchSpy = jest.spyOn(global, 'fetch');
+
+        await executar(
+          new FetchMercadoPagoGateway({ get: () => undefined } as never),
+        );
+
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(sinaisEmitidos()).toEqual([
+          {
+            metric: 'billing.mercado_pago.falha_tecnica',
+            operacao,
+            motivo: 'token_ausente',
+          },
+        ]);
+      },
+    );
+
+    it('trata HTTP 408 como timeout com o status HTTP', async () => {
+      responder(408);
+
+      await new FetchMercadoPagoGateway(config as never).cancelarOrder(
+        'ORD1',
+        'k1',
+      );
+
+      expect(sinaisEmitidos()).toEqual([
+        {
+          metric: 'billing.mercado_pago.falha_tecnica',
+          operacao: 'cancelar_order',
+          motivo: 'timeout',
+          statusHttp: 408,
+        },
+      ]);
+    });
+
+    it('emite resposta_invalida quando a criação não traz order id e checkout_url', async () => {
+      responder(201, JSON.stringify({ id: 'ORD-NEW' }));
+
+      await new FetchMercadoPagoGateway(config as never).criarOrder(
+        inputCriarOrder,
+      );
+
+      expect(sinaisEmitidos()).toEqual([
+        {
+          metric: 'billing.mercado_pago.falha_tecnica',
+          operacao: 'criar_order',
+          motivo: 'resposta_invalida',
+        },
+      ]);
+    });
+
+    it('não expõe corpo da resposta, token, pagador nem identificadores', async () => {
+      responder(500, '{"message":"segredo-no-corpo"}');
+
+      await new FetchMercadoPagoGateway(config as never).criarOrder(
+        inputCriarOrder,
+      );
+
+      const mensagem = warn.mock.calls[0][0] as string;
+      expect(mensagem).not.toContain('segredo-no-corpo');
+      expect(mensagem).not.toContain('token-teste');
+      expect(mensagem).not.toContain('a@b.com');
+      expect(mensagem).not.toContain('c1');
+      expect(mensagem).not.toContain('10.00');
+    });
+
+    it('emite um sinal por chamada HTTP com falha, inclusive em retentativas', async () => {
+      responder(502);
+      const gateway = new FetchMercadoPagoGateway(config as never);
+
+      await gateway.consultarOrder('ORD1');
+      await gateway.consultarOrder('ORD1');
+
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('não emite sinal em sucesso', async () => {
+      const gateway = new FetchMercadoPagoGateway(config as never);
+
+      responder(201, JSON.stringify({ id: 'ORD', checkout_url: 'https://c' }));
+      await gateway.criarOrder(inputCriarOrder);
+      responder(200, JSON.stringify({ id: 'ORD1', status: 'processed' }));
+      await gateway.consultarOrder('ORD1');
+      responder(200, JSON.stringify({ status: 'canceled' }));
+      await gateway.cancelarOrder('ORD1', 'k1');
+      responder(201, JSON.stringify({ status: 'refunded' }));
+      await gateway.estornarTotal('ORD1', 'k1');
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'criarOrder 400',
+        400,
+        (g: FetchMercadoPagoGateway) => g.criarOrder(inputCriarOrder),
+      ],
+      [
+        'cancelarOrder 422',
+        422,
+        (g: FetchMercadoPagoGateway) => g.cancelarOrder('ORD1', 'k1'),
+      ],
+      [
+        'estornarTotal 428',
+        428,
+        (g: FetchMercadoPagoGateway) => g.estornarTotal('ORD1', 'k1'),
+      ],
+      [
+        'consultarOrder 404',
+        404,
+        (g: FetchMercadoPagoGateway) => g.consultarOrder('ORD1'),
+      ],
+      [
+        'cancelarOrder 409 genérico',
+        409,
+        (g: FetchMercadoPagoGateway) => g.cancelarOrder('ORD1', 'k1'),
+      ],
+    ])(
+      'não emite sinal em resultado de negócio: %s',
+      async (_nome, status, executar) => {
+        responder(status, '{"message":"Conflict"}');
+
+        await executar(new FetchMercadoPagoGateway(config as never));
+
+        expect(warn).not.toHaveBeenCalled();
+      },
+    );
+
+    it('não emite sinal em conflito específico de negócio', async () => {
+      responder(
+        409,
+        JSON.stringify({ errors: [{ code: 'cannot_cancel_order' }] }),
+      );
+
+      const resultado = await new FetchMercadoPagoGateway(
+        config as never,
+      ).cancelarOrder('ORD1', 'k1');
+
+      expect(resultado.tipo).toBe('conflito_especifico');
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });

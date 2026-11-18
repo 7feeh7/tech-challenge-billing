@@ -1,4 +1,8 @@
-import { METRICA_LOG, serializarMetricaLog } from './metrica-log';
+import {
+  METRICA_LOG,
+  serializarFalhaTecnicaMercadoPago,
+  serializarMetricaLog,
+} from './metrica-log';
 
 describe('serializarMetricaLog', () => {
   it('mantém estáveis os nomes das métricas de log', () => {
@@ -8,6 +12,7 @@ describe('serializarMetricaLog', () => {
       PENDENCIA_ESTORNO_ABERTA: 'billing.pendencia_estorno_aberta',
       OPERACAO_FINANCEIRA_INDETERMINADA:
         'billing.operacao_financeira_indeterminada',
+      MERCADO_PAGO_FALHA_TECNICA: 'billing.mercado_pago.falha_tecnica',
     });
   });
 
@@ -62,5 +67,35 @@ describe('serializarMetricaLog', () => {
 
     expect(json).not.toContain('12345678901');
     expect(json).not.toContain('segredo');
+  });
+});
+
+describe('serializarFalhaTecnicaMercadoPago', () => {
+  it('serializa operação, motivo e status HTTP', () => {
+    const json = serializarFalhaTecnicaMercadoPago({
+      operacao: 'criar_order',
+      motivo: 'http_5xx',
+      statusHttp: 503,
+    });
+
+    expect(JSON.parse(json)).toEqual({
+      metric: 'billing.mercado_pago.falha_tecnica',
+      operacao: 'criar_order',
+      motivo: 'http_5xx',
+      statusHttp: 503,
+    });
+  });
+
+  it('omite o status HTTP quando não há resposta', () => {
+    const json = serializarFalhaTecnicaMercadoPago({
+      operacao: 'consultar_order',
+      motivo: 'rede',
+    });
+
+    expect(JSON.parse(json)).toEqual({
+      metric: 'billing.mercado_pago.falha_tecnica',
+      operacao: 'consultar_order',
+      motivo: 'rede',
+    });
   });
 });
