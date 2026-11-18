@@ -31,9 +31,16 @@ describe('PrismaPendenciaFinanceiraMonitorGateway', () => {
       }),
     );
 
-    const payload = JSON.parse(log.mock.calls[0][0] as string);
-    expect(payload.metric).toBe('billing.situacao_financeira_indeterminada');
-    expect(payload.operacaoId).toBe('op1');
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({
+      metric: 'billing.situacao_financeira_indeterminada',
+      ordemServicoId: 'os1',
+      rodada: 1,
+      correlationId: 'corr',
+      operacaoId: 'op1',
+      cobrancaId: 'c1',
+      motivo: 'timeout',
+    });
 
     log.mockRestore();
   });

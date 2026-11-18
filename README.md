@@ -35,6 +35,10 @@ A cobertura é reportada em `coverage/lcov.info` para o SonarCloud.
 
 Mensagens não financeiras em `docs/contratos/` com exemplos JSON validados nos testes.
 
+## Observabilidade
+
+Logs JSON estruturados com campo `metric` para as métricas de log do Datadog: ver `docs/metricas-de-log.md`.
+
 ## Infraestrutura e deploy
 
 - Kubernetes: `k8s/` (namespace `billing`, Deployment `billing-api`, HPA **1–3** [D5.5], Job `billing-migrate`)

@@ -21,6 +21,10 @@ import {
   EVENTO_RESPOSTA_CANCELAMENTO,
   type PayloadRespostaCancelamentoFinanceiro,
 } from '@/shared/messaging/envelope';
+import {
+  METRICA_LOG,
+  serializarMetricaLog,
+} from '@/shared/observability/metrica-log';
 import type {
   OperacaoFinanceiraGateway,
   OperacaoFinanceiraRegistro,
@@ -106,7 +110,7 @@ export class ExecutarCancelamentoFinanceiroService {
 
     if (cobranca.situacao === SituacaoCobranca.PAGA) {
       if (operacao.resultadoExecucao === 'REPARO_INICIADO') {
-        await this.abrirPendencia(operacao, cobranca);
+        await this.abrirPendencia(operacao, cobranca, 'reparo_iniciado');
         return;
       }
       const ok = await this.estornarCobrancaPaga(operacao, cobranca);
@@ -334,6 +338,7 @@ export class ExecutarCancelamentoFinanceiroService {
   private async abrirPendencia(
     operacao: OperacaoFinanceiraRegistro,
     cobranca: Cobranca,
+    motivo: 'reparo_iniciado' | 'operacao_indeterminada',
   ): Promise<void> {
     const pendenciaId = await this.unitOfWork.executar(async (ctx) => {
       const pendencia = await this.pendencias.criar(ctx, {
@@ -350,6 +355,19 @@ export class ExecutarCancelamentoFinanceiroService {
       await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
       return pendencia.id;
     });
+
+    // Após o commit e antes de concluir: se a conclusão falhar, o reprocesso
+    // encontra a cobrança em PENDENCIA_MANUAL e não abre (nem sinaliza) outra.
+    this.logger.warn(
+      serializarMetricaLog(METRICA_LOG.PENDENCIA_ESTORNO_ABERTA, {
+        ordemServicoId: cobranca.ordemServicoId,
+        rodada: cobranca.rodada,
+        correlationId: operacao.correlationId,
+        operacaoId: operacao.id,
+        cobrancaId: cobranca.id,
+        motivo,
+      }),
+    );
 
     await this.concluirOperacao(
       operacao,
@@ -371,10 +389,19 @@ export class ExecutarCancelamentoFinanceiroService {
         operacao.rodada,
       );
       if (cobranca?.id) {
+        // Emitido antes de abrir a pendência: se a abertura falhar, o próximo
+        // ciclo repete este sinal junto com a nova tentativa registrada.
         this.logger.warn(
-          `Operação ${operacao.id} indeterminada após ${tentativas} tentativas com a mesma chave MP; abrindo pendência manual (D3.15).`,
+          serializarMetricaLog(METRICA_LOG.OPERACAO_FINANCEIRA_INDETERMINADA, {
+            ordemServicoId: operacao.ordemServicoId,
+            rodada: operacao.rodada,
+            correlationId: operacao.correlationId,
+            operacaoId: operacao.id,
+            cobrancaId: cobranca.id,
+            motivo: 'tentativas_esgotadas',
+          }),
         );
-        await this.abrirPendencia(operacao, cobranca);
+        await this.abrirPendencia(operacao, cobranca, 'operacao_indeterminada');
       }
       return;
     }
