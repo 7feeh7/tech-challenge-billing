@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { OperacaoFinanceiraGateway } from '../src/modules/cancelamento-financeiro/application/ports/operacao-financeira.gateway';
@@ -18,7 +20,10 @@ import { PrismaModule } from '../src/shared/database/prisma.module';
 import { PrismaService } from '../src/shared/database/prisma.service';
 import type { UnitOfWork } from '../src/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '../src/shared/database/unit-of-work.port';
-import { EVENTO_CANCELAR_FINANCEIRO } from '../src/shared/messaging/envelope';
+import {
+  EVENTO_CANCELAR_FINANCEIRO,
+  EVENTO_RESPOSTA_CANCELAMENTO,
+} from '../src/shared/messaging/envelope';
 import { exigirDatabaseUrl } from './helpers/exigir-database-integracao';
 
 describe('Cancelamento financeiro (integração)', () => {
@@ -177,5 +182,143 @@ describe('Cancelamento financeiro (integração)', () => {
     const concluida = await operacoes.buscarPorId(operacao!.id);
     expect(concluida?.situacao).toBe('CONCLUIDA');
     expect(concluida?.resultado).toBe('CANCELADA');
+  });
+
+  describe('cobrança EXPIRADA', () => {
+    const exemploResposta = JSON.parse(
+      readFileSync(
+        join(
+          __dirname,
+          '..',
+          'docs',
+          'contratos',
+          'exemplos',
+          `${EVENTO_RESPOSTA_CANCELAMENTO}.json`,
+        ),
+        'utf-8',
+      ),
+    ) as Record<string, unknown> & { payload: Record<string, unknown> };
+
+    function tiposDasChaves(objeto: Record<string, unknown>) {
+      return Object.fromEntries(
+        Object.entries(objeto).map(([chave, valor]) => [
+          chave,
+          valor === null ? 'null' : typeof valor,
+        ]),
+      );
+    }
+
+    async function criarCobrancaExpirada(osId: string, correlationId: string) {
+      const orcamentoId = randomUUID();
+      await prisma.orcamento.create({
+        data: {
+          id: orcamentoId,
+          ordemServicoId: osId,
+          rodada: 1,
+          clienteId: randomUUID(),
+          correlationId,
+          valorTotalCentavos: 5000,
+          situacao: 'APROVADO',
+        },
+      });
+      await uow.executar(async (ctx) => {
+        await cobrancas.criar(
+          ctx,
+          new Cobranca({
+            orcamentoId,
+            ordemServicoId: osId,
+            rodada: 1,
+            clienteId: randomUUID(),
+            correlationId,
+            valorTotalCentavos: 5000,
+            prazoPagamento: new Date('2020-01-01T00:00:00.000Z'),
+            situacao: SituacaoCobranca.EXPIRADA,
+          }),
+        );
+      });
+    }
+
+    function montarCancelarFinanceiro(
+      osId: string,
+      correlationId: string,
+      eventId: string,
+    ) {
+      return {
+        eventId,
+        eventType: EVENTO_CANCELAR_FINANCEIRO,
+        version: 1,
+        occurredAt: new Date().toISOString(),
+        source: 'os-service',
+        correlationId,
+        causationId: null,
+        ordemServicoId: osId,
+        rodada: 1,
+        payload: {
+          etapaOrigem: 'CANCELAMENTO_OS',
+          motivo: 'Pagamento expirado',
+          resultadoExecucao: 'REPARO_NAO_INICIADO',
+        },
+      };
+    }
+
+    it('responde CANCELADA uma única vez, grava o bloqueio e não duplica na reentrega', async () => {
+      jest.mocked(mpMock.cancelarOrder).mockClear();
+      const osId = randomUUID();
+      const correlationId = randomUUID();
+      const eventId = randomUUID();
+      await criarCobrancaExpirada(osId, correlationId);
+      const mensagem = montarCancelarFinanceiro(osId, correlationId, eventId);
+
+      await processar.processar(mensagem);
+      const operacao = await prisma.operacaoFinanceira.findUniqueOrThrow({
+        where: { eventId },
+      });
+      await executar.executar(operacao.id);
+
+      const concluida = await operacoes.buscarPorId(operacao.id);
+      expect(concluida?.situacao).toBe('CONCLUIDA');
+      expect(concluida?.resultado).toBe('CANCELADA');
+
+      const cobrancaAposConclusao =
+        await cobrancas.buscarPorOrdemServicoERodada(osId, 1);
+      expect(cobrancaAposConclusao?.situacao).toBe(SituacaoCobranca.EXPIRADA);
+
+      const bloqueio = await prisma.bloqueioCriacaoCobranca.findUnique({
+        where: { ordemServicoId_rodada: { ordemServicoId: osId, rodada: 1 } },
+      });
+      expect(bloqueio).not.toBeNull();
+
+      const respostas = await prisma.mensagemOutbox.findMany({
+        where: { eventType: EVENTO_RESPOSTA_CANCELAMENTO },
+      });
+      expect(respostas).toHaveLength(1);
+      const envelope = respostas[0].envelope as Record<string, unknown> & {
+        payload: Record<string, unknown>;
+      };
+      expect(envelope.payload).toEqual({
+        resultado: 'CANCELADA',
+        pendenciaId: null,
+      });
+      expect(envelope.causationId).toBe(eventId);
+      expect(envelope.ordemServicoId).toBe(osId);
+      expect(tiposDasChaves(envelope)).toEqual(tiposDasChaves(exemploResposta));
+      expect(tiposDasChaves(envelope.payload)).toEqual(
+        tiposDasChaves(exemploResposta.payload),
+      );
+
+      await processar.processar(mensagem);
+      await executar.executar(operacao.id);
+
+      const cobrancaAposReentrega =
+        await cobrancas.buscarPorOrdemServicoERodada(osId, 1);
+      expect(cobrancaAposReentrega?.situacao).toBe(SituacaoCobranca.EXPIRADA);
+      expect(await prisma.operacaoFinanceira.count()).toBe(1);
+      expect(
+        await prisma.mensagemOutbox.count({
+          where: { eventType: EVENTO_RESPOSTA_CANCELAMENTO },
+        }),
+      ).toBe(1);
+      expect(mpMock.cancelarOrder).not.toHaveBeenCalled();
+    });
   });
 });
