@@ -1,13 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/shared/database/prisma.service';
+import { METRICA_LOG, serializarMetricaLog } from './metrica-log';
 import type {
   PendenciaFinanceiraMonitorGateway,
   RegistrarPendenciaFinanceiraMonitorInput,
 } from './pendencia-financeira-monitor.gateway';
-
-const METRICA_SITUACAO_FINANCEIRA_INDETERMINADA =
-  'billing.situacao_financeira_indeterminada';
 
 @Injectable()
 export class PrismaPendenciaFinanceiraMonitorGateway
@@ -35,8 +33,7 @@ export class PrismaPendenciaFinanceiraMonitorGateway
       },
     });
     this.logger.log(
-      JSON.stringify({
-        metric: METRICA_SITUACAO_FINANCEIRA_INDETERMINADA,
+      serializarMetricaLog(METRICA_LOG.SITUACAO_FINANCEIRA_INDETERMINADA, {
         ordemServicoId: input.ordemServicoId,
         rodada: input.rodada,
         correlationId: input.correlationId,

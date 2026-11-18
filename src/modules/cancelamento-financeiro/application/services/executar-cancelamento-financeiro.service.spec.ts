@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '@/modules/cobrancas/application/ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from '@/modules/cobrancas/application/ports/operacao-criacao-order.gateway';
@@ -198,6 +199,160 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
     await servico.executar('op1');
     expect(pendencias.criar).toHaveBeenCalled();
     expect(mp.estornarTotal).not.toHaveBeenCalled();
+  });
+
+  describe('sinais de log estruturado', () => {
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    const cobrancaPaga = new Cobranca({
+      ...cobrancaPendente,
+      situacao: SituacaoCobranca.PAGA,
+      pagamentoConfirmadoEm: new Date(),
+    });
+
+    function sinaisEmitidos(): Record<string, unknown>[] {
+      return warn.mock.calls.map(([mensagem]) => JSON.parse(mensagem));
+    }
+
+    it('emite um único billing.pendencia_estorno_aberta ao abrir pendência por reparo iniciado', async () => {
+      const { servico } = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            resultadoExecucao: 'REPARO_INICIADO',
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaPaga),
+        },
+        pendencias: { criar: jest.fn().mockResolvedValue({ id: 'pend1' }) },
+      });
+
+      await servico.executar('op1');
+
+      expect(sinaisEmitidos()).toEqual([
+        {
+          metric: 'billing.pendencia_estorno_aberta',
+          ordemServicoId: 'os1',
+          rodada: 1,
+          correlationId: 'corr',
+          operacaoId: 'op1',
+          cobrancaId: 'c1',
+          motivo: 'reparo_iniciado',
+        },
+      ]);
+    });
+
+    it('emite billing.operacao_financeira_indeterminada e billing.pendencia_estorno_aberta ao esgotar tentativas do MP', async () => {
+      const { servico } = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            tentativasMercadoPago: 4,
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaPaga),
+          buscarPorId: jest.fn().mockResolvedValue(cobrancaPaga),
+        },
+        orders: {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+            id: 'omp1',
+            mercadoPagoOrderId: 'ORD1',
+          }),
+        },
+        mp: {
+          estornarTotal: jest
+            .fn()
+            .mockResolvedValue({ tipo: 'indeterminado', motivo: 'x' }),
+        },
+        pendencias: { criar: jest.fn().mockResolvedValue({ id: 'pend1' }) },
+      });
+
+      await servico.executar('op1');
+
+      const contexto = {
+        ordemServicoId: 'os1',
+        rodada: 1,
+        correlationId: 'corr',
+        operacaoId: 'op1',
+        cobrancaId: 'c1',
+      };
+      expect(sinaisEmitidos()).toEqual([
+        {
+          metric: 'billing.operacao_financeira_indeterminada',
+          ...contexto,
+          motivo: 'tentativas_esgotadas',
+        },
+        {
+          metric: 'billing.pendencia_estorno_aberta',
+          ...contexto,
+          motivo: 'operacao_indeterminada',
+        },
+      ]);
+    });
+
+    it('não emite sinal enquanto as tentativas do MP não se esgotam', async () => {
+      const { servico } = criarServico({
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaPaga),
+        },
+        orders: {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+            id: 'omp1',
+            mercadoPagoOrderId: 'ORD1',
+          }),
+        },
+        mp: {
+          estornarTotal: jest
+            .fn()
+            .mockResolvedValue({ tipo: 'indeterminado', motivo: 'x' }),
+        },
+      });
+
+      await servico.executar('op1');
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('não repete o sinal ao reprocessar operação cuja pendência já foi aberta', async () => {
+      const cobrancaComPendencia = new Cobranca({
+        ...cobrancaPaga,
+        situacao: SituacaoCobranca.PENDENCIA_MANUAL,
+      });
+      const { servico, pendencias } = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            tentativasMercadoPago: 4,
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaComPendencia),
+        },
+      });
+
+      await servico.executar('op1');
+
+      expect(pendencias.criar).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   it('estorna integral quando paga e REPARO_NAO_INICIADO', async () => {
