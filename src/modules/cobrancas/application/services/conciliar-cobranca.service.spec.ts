@@ -852,6 +852,21 @@ describe('ConciliarCobrancaService', () => {
       ]);
     });
 
+    it('publica PagamentoConfirmado com origemPagamento PAGAMENTO_LEGITIMO para a order que confirma o pagamento', async () => {
+      const { servico, outbox } = montar({
+        cobranca: cobranca,
+        orderAtiva: order,
+      });
+
+      await servico.conciliarPorCobrancaId('c1');
+
+      const [, mensagem] = outbox.registrar.mock.calls[0];
+      expect(mensagem.envelope.payload).toMatchObject({
+        orderId: 'ORD1',
+        origemPagamento: 'PAGAMENTO_LEGITIMO',
+      });
+    });
+
     it('marca como legítima a order que confirma o primeiro pagamento na conciliação periódica', async () => {
       const { servico, orders } = montar({
         cobranca: cobranca,

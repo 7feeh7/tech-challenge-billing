@@ -170,6 +170,7 @@ describe('RegistrarSegundoPagamentoService', () => {
           orderId: 'ORD2',
           aprovadoEm: aprovadoEm.toISOString(),
           valorCentavos: 1000,
+          origemPagamento: 'SEGUNDO_PAGAMENTO',
         },
       });
     });

@@ -77,9 +77,20 @@ Campo aditivo em `v1` (D3.12), preenchido em toda publicação:
 
 Exemplos: `billing.estorno-concluido.v1.json` (`SEGUNDO_PAGAMENTO`), `billing.estorno-concluido.pendencia-resolvida.v1.json` (`PENDENCIA_RESOLVIDA`) e `billing.estorno-concluido.sem-origem.v1.json`, o formato anterior ao campo, mantido como compatibilidade: consumidores aceitam a mensagem sem `origemEstorno` e mantêm o comportamento que já tinham.
 
-### `billing.pagamento-confirmado.v1` da segunda order
+### `billing.pagamento-confirmado.v1`: campo aditivo `origemPagamento`
 
-O Billing publica `PagamentoConfirmado` com o `orderId` da segunda order, na mesma transação do registro do segundo pagamento, para o OS abrir a pendência `SEGUNDO_PAGAMENTO`. A cobrança legítima segue `PAGA`.
+Campo aditivo em `v1` (D3.12), preenchido pelo Billing em toda publicação nova. O Billing é a fonte da verdade da classificação, gravada na mesma transação da publicação a partir do que fica persistido:
+
+| `origemPagamento`    | Quando                                                                                                                                                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAGAMENTO_LEGITIMO` | A order que confirma o pagamento da cobrança, marcada em `orders_mercado_pago.confirmou_pagamento` na mesma transação. Vale para a conciliação (webhook ou periódica) e para a expiração que encontra pagamento dentro do prazo, pois ela delega à conciliação.                                    |
+| `SEGUNDO_PAGAMENTO`  | Order paga da mesma cobrança, diferente da que confirmou o pagamento, registrada em `estornos_automaticos` com tipo `SEGUNDO_PAGAMENTO` na mesma transação. `orderId` é o da **segunda** order e a cobrança legítima segue `PAGA`. O OS usa a mensagem para abrir a pendência `SEGUNDO_PAGAMENTO`. |
+
+Com duas orders pagas ao mesmo tempo na mesma cobrança, o bloqueio da linha da cobrança serializa as conciliações: a primeira publica `PAGAMENTO_LEGITIMO` e a segunda publica `SEGUNDO_PAGAMENTO`. Webhook repetido ou conciliação concorrente da mesma order não publicam uma segunda vez.
+
+Exemplos: `billing.pagamento-confirmado.v1.json` (`PAGAMENTO_LEGITIMO`), `billing.pagamento-confirmado.segundo-pagamento.v1.json` (`SEGUNDO_PAGAMENTO`) e `billing.pagamento-confirmado.sem-origem.v1.json`, o formato anterior ao campo, mantido como compatibilidade.
+
+Mensagem legada, sem `origemPagamento`: continua válida em `v1`. O consumidor não pode presumir a origem pelo `orderId`: o OS mantém a classificação própria que já tinha (a da Parte B, pela evidência do estorno e pela ordem de chegada). Valor fora de `PAGAMENTO_LEGITIMO` e `SEGUNDO_PAGAMENTO` é violação de contrato.
 
 ### `billing.pagamento-tardio-registrado.v1`: `tratamento`
 

@@ -150,6 +150,7 @@ export class ConciliarCobrancaService {
             orderId: order.mercadoPagoOrderId,
             aprovadoEm: interpretacao.aprovadoEm.toISOString(),
             valorCentavos: atual.valorTotalCentavos,
+            origemPagamento: 'PAGAMENTO_LEGITIMO',
           },
         };
 

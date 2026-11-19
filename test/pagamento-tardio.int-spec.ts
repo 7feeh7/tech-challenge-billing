@@ -266,11 +266,20 @@ describe('Pagamento tardio (integração)', () => {
     const confirmados = await prisma.mensagemOutbox.findMany({
       where: { eventType: 'billing.pagamento-confirmado.v1' },
     });
-    expect(
-      confirmados.map(
-        (m) => (m.envelope as { payload: { orderId: string } }).payload.orderId,
-      ),
-    ).toEqual(['ORD-TARDIA']);
+    const payloads = confirmados.map(
+      (m) =>
+        (
+          m.envelope as {
+            payload: { orderId: string; origemPagamento: string };
+          }
+        ).payload,
+    );
+    expect(payloads).toEqual([
+      expect.objectContaining({
+        orderId: 'ORD-TARDIA',
+        origemPagamento: 'PAGAMENTO_LEGITIMO',
+      }),
+    ]);
     expect(mp.chamadasEstorno).toHaveLength(0);
     expect(await publicadas()).toHaveLength(0);
     expect(await prisma.estornoAutomatico.count()).toBe(0);
