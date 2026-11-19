@@ -1,13 +1,32 @@
-# Aplicado pelo workflow migrate.yml (workflow_dispatch na main), antes do deploy.
+# Aplica as migrations com a mesma imagem imutável (tag = SHA do commit) que o
+# Deployment usa. O pipeline cria e remove este Job (nome único por run: __MIGRATION_ID__
+# vira `<run_id>-<tentativa>`): o deploy.yml o executa entre o build e o rollout; o
+# migrate.yml (workflow_dispatch na main) o executa em manutenção.
+#
+# Roda dentro do cluster porque o RDS é privado (só os nodes do EKS o alcançam),
+# então o runner do GitHub Actions não conseguiria conectar direto no banco.
+#
+# Segredo mínimo: o `prisma migrate deploy` só lê DATABASE_URL (prisma.config.ts), então
+# o Job usa o Secret próprio `billing-migrate-secret-<id>`, nunca o `billing-secret` da
+# aplicação (credenciais do Mercado Pago, tokens, chave JWT). Também não usa o ConfigMap
+# nem a ServiceAccount `billing-api` (IRSA): roda com a ServiceAccount padrão do
+# namespace, sem acesso à AWS.
+#
+# Se o Job falhar, o pipeline para antes do rollout e o Deployment antigo continua
+# servindo.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: billing-migrate
+  name: billing-migrate-__MIGRATION_ID__
   namespace: billing
   labels:
     app: billing-migrate
 spec:
   backoffLimit: 2
+  # Menor que a espera do pipeline (600 s): o cluster marca Failed antes de o
+  # pipeline desistir.
+  activeDeadlineSeconds: 540
+  # O pipeline remove o Job ao terminar; isto limpa se ele for interrompido.
   ttlSecondsAfterFinished: 600
   template:
     metadata:
@@ -17,14 +36,13 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
+          # A tag é injetada pelo pipeline (mesma imagem da API).
           image: ECR_REPOSITORY_URL:__IMAGE_TAG__
           imagePullPolicy: Always
           command: ["yarn", "prisma", "migrate", "deploy"]
           envFrom:
-            - configMapRef:
-                name: billing-config
             - secretRef:
-                name: billing-secret
+                name: billing-migrate-secret-__MIGRATION_ID__
           resources:
             requests:
               cpu: "100m"

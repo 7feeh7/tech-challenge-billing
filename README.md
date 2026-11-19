@@ -57,11 +57,11 @@ Logs JSON estruturados com campo `metric` para as métricas de log do Datadog: v
 
 ## Infraestrutura e deploy
 
-- Kubernetes: `k8s/` (namespace `billing`, Deployment `billing-api`, HPA **1–3** [D5.5], Job `billing-migrate`)
+- Kubernetes: `k8s/` (namespace `billing`, Deployment `billing-api`, HPA **1–3** [D5.5], Service NodePort `30081`, Job de migration `billing-migrate-<id>`)
 - Terraform: `terraform/` (fila `billing-in` + DLQ, ECR `tech-challenge-billing-producao`, contêiner `mercado-pago`, exports SSM)
 - Workflows na `main` + _environment_ `producao`:
-  - `deploy.yml`: testes (R4-39) → Terraform apply → imagem com tag SHA → deploy (após migration manual)
-  - `migrate.yml`: Prisma migrate por `workflow_dispatch`
+  - `deploy.yml`: uma run, cada job por `needs`: testes (R4-39) → Terraform apply → imagem com tag SHA → migration (Job com a mesma imagem) → rollout com a mesma tag
+  - `migrate.yml`: só manutenção manual (`workflow_dispatch`, input `image_tag`); fora do fluxo normal de implantação
   - `terraform.yml`: push em `terraform/**` ou `workflow_dispatch` (`plan` padrão; `destroy` exige `DESTRUIR-tech-challenge-billing`)
 
 Documentação dos manifests: `k8s/README.md`. Ordem operacional: runbook fase 7 (`13-deployment-runbook.md`).

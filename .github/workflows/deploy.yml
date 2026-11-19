@@ -1,6 +1,12 @@
 name: Deploy Application
 
-# Ordem na main (fora de terraform/**): test → terraform apply → imagem (SHA) → deploy (manual após migration).
+# Uma run por commit na main (fora de terraform/**): test → terraform → build → migration
+# → deploy, cada job por `needs`. A imagem é construída uma vez (tag = SHA do commit) e a
+# migration e o rollout usam essa mesma tag. Se a migration falhar, o rollout não roda e o
+# Deployment anterior segue no ar. Não há espera por outro workflow nem `workflow_run`.
+#
+# Pontos de aprovação: cada job com `environment: producao` (terraform, build, migration
+# e deploy) pede a aprovação configurada no environment.
 on:
   push:
     branches: [main]
@@ -17,6 +23,9 @@ env:
   TF_STATE_KEY: tech-challenge-billing/producao/terraform.tfstate
   OS_SERVICE_BASE_URL: http://oficina-api.oficina.svc.cluster.local
 
+# O GitHub mantém uma run em execução e uma pendente por grupo: uma nova run cancela
+# a pendente, mesmo com cancel-in-progress false. O grupo é compartilhado com o
+# terraform.yml (mesmo state) e com o migrate.yml (orçamento de conexões do banco).
 concurrency:
   group: billing-producao-pipeline
   cancel-in-progress: false
@@ -123,10 +132,61 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve tfplan
 
+  build:
+    name: Build e push da imagem
+    if: github.ref == 'refs/heads/main'
+    needs: terraform
+    runs-on: ubuntu-latest
+    environment: producao
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build e push imagem (SHA imutavel)
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/parametros-aws.sh"
+          ECR_REPOSITORY=$(parametro infra/billing_ecr_repository_url)
+          docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REPOSITORY:$IMAGE_TAG"
+
+  migration:
+    name: Migration (Job no EKS)
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: producao
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # O Job é removido ao fim da ação, antes do job de deploy: não soma conexões ao surge do rollout.
+      - uses: ./.github/actions/migration-billing
+        with:
+          image-tag: ${{ github.sha }}
+
   deploy:
     name: Deploy no EKS
     if: github.ref == 'refs/heads/main'
-    needs: [test, terraform]
+    needs: migration
     runs-on: ubuntu-latest
     environment: producao
     permissions:
@@ -200,16 +260,6 @@ jobs:
           echo "os_token=$TOKEN_OS" >> $GITHUB_OUTPUT
           echo "mp_access=$MP_ACCESS" >> $GITHUB_OUTPUT
           echo "mp_webhook=$MP_WEBHOOK" >> $GITHUB_OUTPUT
-
-      - uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build e push imagem (SHA imutavel)
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          ECR_REPOSITORY: ${{ steps.ssm.outputs.ecr }}
-        run: |
-          docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
-          docker push "$ECR_REPOSITORY:$IMAGE_TAG"
 
       - name: Configurar kubectl
         run: |
