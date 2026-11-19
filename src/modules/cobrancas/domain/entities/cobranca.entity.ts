@@ -124,6 +124,17 @@ export class Cobranca {
     return this._situacao === SituacaoCobranca.PAGA;
   }
 
+  // Situações em que uma order já confirmou o pagamento da cobrança: qualquer
+  // outra order paga dela é segundo pagamento, não pagamento tardio.
+  pagamentoConfirmado(): boolean {
+    return (
+      this._situacao === SituacaoCobranca.PAGA ||
+      this._situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO ||
+      this._situacao === SituacaoCobranca.ESTORNADA ||
+      this._situacao === SituacaoCobranca.PENDENCIA_MANUAL
+    );
+  }
+
   aindaNoPrazo(agora = new Date()): boolean {
     return agora.getTime() <= this.prazoPagamento.getTime();
   }
@@ -191,17 +202,31 @@ export class Cobranca {
     this._bloqueadoConciliacaoAte = null;
   }
 
-  marcarPendenciaManual(): void {
+  // `aprovadoEmRevelado` registra o pagamento que a consulta da order revelou
+  // numa cobrança ainda sem pagamento confirmado (PENDENTE ou EXPIRADA).
+  marcarPendenciaManual(aprovadoEmRevelado?: Date): void {
     if (this._situacao === SituacaoCobranca.PENDENCIA_MANUAL) {
       return;
     }
-    if (this._situacao !== SituacaoCobranca.PAGA) {
+    if (!this.aceitaPendenciaManual()) {
       throw new SituacaoCobrancaInvalidaError(
         this._situacao,
         'marcarPendenciaManual',
       );
     }
+    if (aprovadoEmRevelado && !this._pagamentoConfirmadoEm) {
+      this._pagamentoConfirmadoEm = aprovadoEmRevelado;
+    }
     this._situacao = SituacaoCobranca.PENDENCIA_MANUAL;
     this._bloqueadoConciliacaoAte = null;
+  }
+
+  private aceitaPendenciaManual(): boolean {
+    return (
+      this._situacao === SituacaoCobranca.PAGA ||
+      this._situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO ||
+      this._situacao === SituacaoCobranca.PENDENTE ||
+      this._situacao === SituacaoCobranca.EXPIRADA
+    );
   }
 }

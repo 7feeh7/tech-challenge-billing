@@ -91,6 +91,8 @@ export interface PayloadPendenciaResolvida {
   valorEstornadoCentavos: number;
 }
 
+export type OrigemEstorno = 'SEGUNDO_PAGAMENTO' | 'PENDENCIA_RESOLVIDA';
+
 export interface PayloadEstornoConcluido {
   cobrancaId: string;
   orderId: string;
@@ -98,6 +100,7 @@ export interface PayloadEstornoConcluido {
   estornadoEm: string;
   tipoEstorno: 'INTEGRAL' | 'PARCIAL';
   statusOrderMercadoPago: string;
+  origemEstorno: OrigemEstorno;
 }
 
 export type FinalidadeConsultaSituacaoFinanceira =
@@ -138,9 +141,13 @@ export interface PayloadCobrancaExpirada {
   statusDetailMercadoPago: string;
 }
 
+export type TratamentoPagamentoTardio =
+  | 'ESTORNO_AUTOMATICO'
+  | 'PENDENCIA_MANUAL';
+
 export interface PayloadPagamentoTardioRegistrado {
   cobrancaId: string;
   orderId: string;
   aprovadoEm: string;
-  tratamento: 'ESTORNO_AUTOMATICO';
+  tratamento: TratamentoPagamentoTardio;
 }

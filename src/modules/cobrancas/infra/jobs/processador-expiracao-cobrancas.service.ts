@@ -6,10 +6,15 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  rastreamentoDoErro,
+  serializarFalhaItemLote,
+} from '@/shared/observability/falha-item-lote';
 import { calcularPosseCobrancaMs } from '../../application/calcular-posse-cobranca';
 import type { CobrancaGateway } from '../../application/ports/cobranca.gateway';
 import { COBRANCA_GATEWAY } from '../../application/ports/tokens';
 import { ExpirarCobrancaService } from '../../application/services/expirar-cobranca.service';
+import type { Cobranca } from '../../domain/entities/cobranca.entity';
 
 @Injectable()
 export class ProcessadorExpiracaoCobrancasService
@@ -79,7 +84,28 @@ export class ProcessadorExpiracaoCobrancasService
     );
     for (const cobranca of pendentes) {
       if (!cobranca.id) continue;
-      await this.expirar.expirarPorCobrancaId(cobranca.id);
+      try {
+        await this.expirar.expirarPorCobrancaId(cobranca.id);
+      } catch (erro) {
+        // A posse da cobrança segue valendo: ela só volta ao lote ao expirar.
+        this.registrarFalha(cobranca, erro);
+      }
     }
+  }
+
+  private registrarFalha(cobranca: Cobranca, erro: unknown): void {
+    this.logger.error(
+      serializarFalhaItemLote(
+        {
+          processador: ProcessadorExpiracaoCobrancasService.name,
+          itemId: cobranca.id as string,
+          ordemServicoId: cobranca.ordemServicoId,
+          rodada: cobranca.rodada,
+          correlationId: cobranca.correlationId,
+        },
+        erro,
+      ),
+      rastreamentoDoErro(erro),
+    );
   }
 }

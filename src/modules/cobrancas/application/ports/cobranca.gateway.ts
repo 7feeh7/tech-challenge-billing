@@ -9,6 +9,11 @@ export interface FiltroListarCobrancas {
 export interface CobrancaGateway {
   criar(contexto: ContextoTransacao, cobranca: Cobranca): Promise<Cobranca>;
   buscarPorId(id: string): Promise<Cobranca | null>;
+  /** Lê a cobrança bloqueando a linha até o fim da transação (`FOR UPDATE`). */
+  bloquearParaAtualizacao(
+    contexto: ContextoTransacao,
+    id: string,
+  ): Promise<Cobranca | null>;
   buscarPorOrcamentoId(orcamentoId: string): Promise<Cobranca | null>;
   buscarPorOrdemServicoERodada(
     ordemServicoId: string,

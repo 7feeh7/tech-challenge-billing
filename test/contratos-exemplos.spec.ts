@@ -18,4 +18,61 @@ describe('Exemplos JSON dos contratos do Billing', () => {
     expect(envelope.version).toBe(1);
     expect(typeof envelope.source).toBe('string');
   });
+
+  describe('billing.estorno-concluido.v1: campo aditivo origemEstorno', () => {
+    const ler = (arquivo: string) =>
+      JSON.parse(readFileSync(join(exemplosDir, arquivo), 'utf-8')) as {
+        payload: Record<string, unknown>;
+      };
+
+    it.each([
+      ['billing.estorno-concluido.v1.json', 'SEGUNDO_PAGAMENTO'],
+      [
+        'billing.estorno-concluido.pendencia-resolvida.v1.json',
+        'PENDENCIA_RESOLVIDA',
+      ],
+    ])('%s traz origemEstorno %s', (arquivo, origem) => {
+      expect(ler(arquivo).payload.origemEstorno).toBe(origem);
+    });
+
+    it('mantém o exemplo anterior, sem o campo, como compatibilidade', () => {
+      const { payload } = ler('billing.estorno-concluido.sem-origem.v1.json');
+
+      expect(payload).not.toHaveProperty('origemEstorno');
+      expect(Object.keys(payload)).toEqual([
+        'cobrancaId',
+        'orderId',
+        'valorEstornadoCentavos',
+        'estornadoEm',
+        'tipoEstorno',
+        'statusOrderMercadoPago',
+      ]);
+    });
+
+    it('o exemplo com origem acrescenta só o campo aditivo ao anterior', () => {
+      const anterior = ler('billing.estorno-concluido.sem-origem.v1.json');
+      const atual = ler('billing.estorno-concluido.v1.json');
+
+      expect(atual.payload).toEqual({
+        ...anterior.payload,
+        origemEstorno: 'SEGUNDO_PAGAMENTO',
+      });
+    });
+  });
+
+  describe('billing.pagamento-tardio-registrado.v1: tratamento', () => {
+    it.each([
+      ['billing.pagamento-tardio-registrado.v1.json', 'ESTORNO_AUTOMATICO'],
+      [
+        'billing.pagamento-tardio-registrado.pendencia-manual.v1.json',
+        'PENDENCIA_MANUAL',
+      ],
+    ])('%s traz tratamento %s', (arquivo, tratamento) => {
+      const envelope = JSON.parse(
+        readFileSync(join(exemplosDir, arquivo), 'utf-8'),
+      ) as { payload: { tratamento: string } };
+
+      expect(envelope.payload.tratamento).toBe(tratamento);
+    });
+  });
 });

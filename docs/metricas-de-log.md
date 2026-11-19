@@ -26,12 +26,30 @@ O `service` dos logs é `billing-api` (autodiscovery em `k8s/deployment.yaml`; o
 
 ## Métricas
 
-| `metric`                                    | Nível  | Significado                                                                                                                                                   | `motivo`                                                                                                    |
-| ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `billing.situacao_financeira_indeterminada` | `info` | A consulta da situação financeira de uma cobrança terminou sem resposta conclusiva do Mercado Pago e foi registrada em `PendenciaFinanceiraMonitoramento`.    | Vem da consulta (comportamento anterior) e pode ser texto livre do erro do gateway                          |
-| `billing.operacao_financeira_indeterminada` | `warn` | Uma operação de cancelamento financeiro esgotou as tentativas com a mesma chave de idempotência e o resultado no Mercado Pago continua indeterminado (D3.15). | `tentativas_esgotadas`                                                                                      |
-| `billing.pendencia_estorno_aberta`          | `warn` | Uma pendência manual de estorno foi criada e a cobrança passou a `PENDENCIA_MANUAL`.                                                                          | `reparo_iniciado` (cobrança paga com reparo já iniciado) ou `operacao_indeterminada` (tentativas esgotadas) |
-| `billing.mercado_pago.falha_tecnica`        | `warn` | Uma chamada HTTP ao Mercado Pago falhou tecnicamente e o gateway devolveu `indeterminado`. Ver a seção abaixo.                                                | `timeout`, `rede`, `http_5xx`, `resposta_invalida` ou `token_ausente` (ver seção abaixo)                    |
+| `metric`                                    | Nível  | Significado                                                                                                                                                                                                                               | `motivo`                                                                                                                                                                                    |
+| ------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `billing.situacao_financeira_indeterminada` | `info` | A consulta da situação financeira de uma cobrança terminou sem resposta conclusiva do Mercado Pago e foi registrada em `PendenciaFinanceiraMonitoramento`.                                                                                | Vem da consulta (comportamento anterior) e pode ser texto livre do erro do gateway                                                                                                          |
+| `billing.operacao_financeira_indeterminada` | `warn` | Uma operação de cancelamento financeiro, ou o estorno automático de um segundo pagamento ou de um pagamento tardio, esgotou as tentativas com a mesma chave de idempotência e o resultado no Mercado Pago continua indeterminado (D3.15). | `tentativas_esgotadas`                                                                                                                                                                      |
+| `billing.pendencia_estorno_aberta`          | `warn` | Uma pendência manual de estorno foi criada. No cancelamento financeiro, a cobrança passou a `PENDENCIA_MANUAL`; no estorno automático, a cobrança não muda de situação (exceto a pendente que expira).                                    | `reparo_iniciado` (cobrança paga com reparo já iniciado), `operacao_indeterminada` (tentativas esgotadas) ou `estorno_automatico_segundo_pagamento` / `estorno_automatico_pagamento_tardio` |
+| `billing.mercado_pago.falha_tecnica`        | `warn` | Uma chamada HTTP ao Mercado Pago falhou tecnicamente e o gateway devolveu `indeterminado`. Ver a seção abaixo.                                                                                                                            | `timeout`, `rede`, `http_5xx`, `resposta_invalida` ou `token_ausente` (ver seção abaixo)                                                                                                    |
+
+## Falha isolada em item de lote
+
+Os processadores em lote (operações financeiras, estornos automáticos, criação de order, conciliação, expiração e aprovações pendentes) isolam a falha de cada item: o erro de um não interrompe os demais. O item com falha é registrado em um log de nível `error` com este JSON no `message` (sem `metric`, não gera métrica):
+
+```json
+{
+  "evento": "falha_item_lote",
+  "processador": "ProcessadorOperacoesFinanceirasService",
+  "itemId": "...",
+  "ordemServicoId": "...",
+  "rodada": 1,
+  "correlationId": "...",
+  "erro": "Error"
+}
+```
+
+Só o tipo do erro entra no JSON, porque a mensagem pode carregar dados da operação; o rastreamento vai no campo de pilha do log. Operações financeiras e estornos automáticos são adiados por `CANCELAMENTO_FINANCEIRO_RETRY_MP_MS` e continuam `EM_ANDAMENTO`; cobranças e orçamentos voltam ao lote quando a reivindicação expira.
 
 ## Consultas Datadog sugeridas
 

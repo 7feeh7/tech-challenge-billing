@@ -3,7 +3,7 @@ import { EVENTO_COBRANCA_EXPIRADA } from '@/shared/messaging/envelope';
 import { Cobranca } from '../../domain/entities/cobranca.entity';
 import { SituacaoCobranca } from '../../domain/situacao-cobranca';
 import { ExpirarCobrancaService } from './expirar-cobranca.service';
-import type { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
+import { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
 
 describe('ExpirarCobrancaService', () => {
   const cobranca = new Cobranca({
@@ -27,6 +27,7 @@ describe('ExpirarCobrancaService', () => {
       {} as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('inexistente');
   });
@@ -48,6 +49,7 @@ describe('ExpirarCobrancaService', () => {
       {} as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -68,6 +70,7 @@ describe('ExpirarCobrancaService', () => {
       {} as never,
       outbox as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalled();
@@ -105,6 +108,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       outbox as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalled();
@@ -142,7 +146,11 @@ describe('ExpirarCobrancaService', () => {
         }),
       } as never,
       {} as never,
-      { tratar } as unknown as TratarPagamentoTardioService,
+      {
+        tratar,
+        deveTratarPagamentoTardio: jest.fn().mockReturnValue(true),
+      } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(tratar).toHaveBeenCalled();
@@ -171,6 +179,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -204,6 +213,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -240,6 +250,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -276,6 +287,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -298,6 +310,7 @@ describe('ExpirarCobrancaService', () => {
       {} as never,
       {} as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(atualizar).toHaveBeenCalled();
@@ -342,6 +355,7 @@ describe('ExpirarCobrancaService', () => {
       } as never,
       outbox as never,
       { tratar: jest.fn() } as unknown as TratarPagamentoTardioService,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
 
     await servico.expirarPorCobrancaId('c1');
@@ -349,5 +363,68 @@ describe('ExpirarCobrancaService', () => {
       expect.anything(),
       expect.objectContaining({ eventType: EVENTO_COBRANCA_EXPIRADA }),
     );
+  });
+
+  describe('order paga encontrada na expiração', () => {
+    function montar(dateApproved: string) {
+      const order = { id: 'loc', mercadoPagoOrderId: 'ORD1' };
+      const tratar = jest.fn();
+      const conciliarPorCobrancaId = jest.fn();
+      const regraDoPrazo = new TratarPagamentoTardioService(
+        new UnitOfWorkFake(),
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+      const servico = new ExpirarCobrancaService(
+        new UnitOfWorkFake(),
+        { buscarPorId: jest.fn().mockResolvedValue(cobranca) } as never,
+        {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        } as never,
+        {
+          consultarOrder: jest.fn().mockResolvedValue({
+            tipo: 'sucesso',
+            order: {
+              id: 'ORD1',
+              status: 'processed',
+              pagamentos: [{ id: 'PAY', status: 'accredited', dateApproved }],
+            },
+          }),
+        } as never,
+        {} as never,
+        {
+          tratar,
+          deveTratarPagamentoTardio: (c: Cobranca, aprovadoEm: Date) =>
+            regraDoPrazo.deveTratarPagamentoTardio(c, aprovadoEm),
+        } as unknown as TratarPagamentoTardioService,
+        { conciliarPorCobrancaId } as never,
+      );
+      return { servico, tratar, conciliarPorCobrancaId, order };
+    }
+
+    it('pago dentro do prazo confirma o pagamento pela conciliação, sem estorno', async () => {
+      const { servico, tratar, conciliarPorCobrancaId, order } = montar(
+        '2019-12-31T00:00:00.000Z',
+      );
+
+      await servico.expirarPorCobrancaId('c1');
+
+      expect(conciliarPorCobrancaId).toHaveBeenCalledWith('c1', order);
+      expect(tratar).not.toHaveBeenCalled();
+    });
+
+    it('pago depois do prazo é tratado como pagamento tardio', async () => {
+      const { servico, tratar, conciliarPorCobrancaId } = montar(
+        '2020-01-02T00:00:00.000Z',
+      );
+
+      await servico.expirarPorCobrancaId('c1');
+
+      expect(tratar).toHaveBeenCalledWith(
+        expect.objectContaining({ cobrancaId: 'c1', orderId: 'loc' }),
+      );
+      expect(conciliarPorCobrancaId).not.toHaveBeenCalled();
+    });
   });
 });

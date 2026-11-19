@@ -6,9 +6,14 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  rastreamentoDoErro,
+  serializarFalhaItemLote,
+} from '@/shared/observability/falha-item-lote';
 import type { OrcamentoGateway } from '../../application/ports/orcamento.gateway';
 import { ORCAMENTO_GATEWAY } from '../../application/ports/tokens';
 import { AprovarOrcamentoUseCase } from '../../application/use-cases/aprovar-orcamento.use-case';
+import type { Orcamento } from '../../domain/entities/orcamento.entity';
 
 @Injectable()
 export class ProcessadorAprovacoesPendentesService
@@ -58,7 +63,28 @@ export class ProcessadorAprovacoesPendentesService
     );
     for (const orcamento of pendentes) {
       if (!orcamento.id) continue;
-      await this.aprovarOrcamento.reprocessarPendente(orcamento.id);
+      try {
+        await this.aprovarOrcamento.reprocessarPendente(orcamento.id);
+      } catch (erro) {
+        // A posse do orçamento segue valendo: ele só volta ao lote ao expirar.
+        this.registrarFalha(orcamento, erro);
+      }
     }
+  }
+
+  private registrarFalha(orcamento: Orcamento, erro: unknown): void {
+    this.logger.error(
+      serializarFalhaItemLote(
+        {
+          processador: ProcessadorAprovacoesPendentesService.name,
+          itemId: orcamento.id as string,
+          ordemServicoId: orcamento.ordemServicoId,
+          rodada: orcamento.rodada,
+          correlationId: orcamento.correlationId,
+        },
+        erro,
+      ),
+      rastreamentoDoErro(erro),
+    );
   }
 }

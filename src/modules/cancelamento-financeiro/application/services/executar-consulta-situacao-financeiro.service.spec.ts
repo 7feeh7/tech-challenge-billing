@@ -111,6 +111,9 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+        }),
       } as never,
       {
         consultarOrder: jest.fn().mockResolvedValue({
@@ -176,6 +179,10 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
       } as never,
       {
         consultarOrder: jest.fn().mockResolvedValue({
@@ -224,6 +231,11 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+          id: 'loc',
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
           id: 'loc',
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
@@ -285,6 +297,9 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+        }),
       } as never,
       {
         consultarOrder: jest.fn().mockResolvedValue({
@@ -329,6 +344,7 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(null),
       } as never,
       {} as never,
       outbox as never,
@@ -373,6 +389,10 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
         }),
@@ -428,6 +448,11 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+          id: 'loc',
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
           id: 'loc',
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
@@ -499,6 +524,10 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
       } as never,
       {
         consultarOrder: jest
@@ -546,6 +575,7 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(null),
       } as never,
       {} as never,
       outbox as never,
@@ -593,6 +623,10 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
       } as never,
       {
         consultarOrder: jest.fn().mockResolvedValue({
@@ -610,5 +644,274 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
     const envelope = (outbox.registrar as jest.Mock).mock.calls[0]?.[1]
       ?.envelope;
     expect(envelope?.payload?.situacaoPagamento).toBe('INDETERMINADA');
+  });
+
+  describe('cobrança paga com segundo pagamento', () => {
+    const paga = new Cobranca({
+      id: 'c1',
+      orcamentoId: 'o1',
+      ordemServicoId: 'os1',
+      rodada: 1,
+      clienteId: 'cl1',
+      correlationId: 'corr',
+      valorTotalCentavos: 5000,
+      prazoPagamento: new Date('2099-01-01T00:00:00.000Z'),
+      situacao: SituacaoCobranca.PAGA,
+      pagamentoConfirmadoEm: new Date('2026-11-15T11:00:00.000Z'),
+    });
+    const orderLegitima = {
+      id: 'omp1',
+      mercadoPagoOrderId: 'ORD-LEGITIMA',
+      chaveIdempotencia: 'k1',
+      confirmouPagamento: true,
+    };
+    const orderSegunda = {
+      id: 'omp2',
+      mercadoPagoOrderId: 'ORD-SEGUNDA',
+      chaveIdempotencia: 'k2',
+    };
+    const consultaPorOrder = {
+      'ORD-LEGITIMA': {
+        tipo: 'sucesso',
+        order: {
+          id: 'ORD-LEGITIMA',
+          status: 'processed',
+          pagamentos: [
+            {
+              id: 'P1',
+              status: 'accredited',
+              dateApproved: '2026-11-15T11:00:00.000Z',
+            },
+          ],
+        },
+      },
+      'ORD-SEGUNDA': {
+        tipo: 'sucesso',
+        order: {
+          id: 'ORD-SEGUNDA',
+          status: 'refunded',
+          pagamentos: [{ id: 'P2', status: 'refunded' }],
+        },
+      },
+    } as Record<string, unknown>;
+
+    function montar(
+      finalidade: 'EXCECAO_E10' | 'PRAZO_DE_REFERENCIA_VENCIDO',
+      ativa: unknown,
+    ) {
+      const mensagens: Array<{ envelope: { payload: any } }> = [];
+      const consultarOrder = jest.fn(
+        async (orderId: string) => consultaPorOrder[orderId],
+      );
+      const servico = new ExecutarConsultaSituacaoFinanceiroService(
+        new UnitOfWorkFake(),
+        {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoConsulta,
+            finalidadeConsulta: finalidade,
+          }),
+          concluirConsulta: jest.fn(),
+        } as never,
+        {
+          buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(paga),
+        } as never,
+        {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(ativa),
+          buscarQueConfirmouPagamento: jest
+            .fn()
+            .mockResolvedValue(orderLegitima),
+        } as never,
+        { consultarOrder, cancelarOrder: jest.fn() } as never,
+        {
+          registrar: jest.fn(async (_ctx, msg) => {
+            mensagens.push(msg);
+          }),
+        } as never,
+        { registrar: jest.fn(), resolverPorOperacao: jest.fn() } as never,
+        5,
+        1000,
+      );
+      return { servico, mensagens, consultarOrder };
+    }
+
+    it.each([
+      ['PRAZO_DE_REFERENCIA_VENCIDO', orderSegunda],
+      ['PRAZO_DE_REFERENCIA_VENCIDO', null],
+      ['EXCECAO_E10', orderSegunda],
+      ['EXCECAO_E10', null],
+    ] as const)(
+      'finalidade %s com order ativa %p responde com a order legítima',
+      async (finalidade, ativa) => {
+        const { servico, mensagens, consultarOrder } = montar(
+          finalidade,
+          ativa,
+        );
+
+        await servico.executar('op1');
+
+        expect(consultarOrder).toHaveBeenCalledTimes(1);
+        expect(consultarOrder).toHaveBeenCalledWith('ORD-LEGITIMA');
+        expect(mensagens[0].envelope.payload).toMatchObject({
+          situacaoPagamento: 'PAGO_NO_PRAZO',
+          // 'REALIZADO' viria da order estornada do segundo pagamento.
+          situacaoEstorno: 'INDETERMINADO',
+          orderId: 'ORD-LEGITIMA',
+          aprovadoEm: '2026-11-15T11:00:00.000Z',
+        });
+      },
+    );
+  });
+
+  describe('cobrança com pagamento confirmado fora de PAGA', () => {
+    const orderLegitima = {
+      id: 'omp1',
+      mercadoPagoOrderId: 'ORD-LEGITIMA',
+      chaveIdempotencia: 'k1',
+    };
+    const orderSegunda = {
+      id: 'omp2',
+      mercadoPagoOrderId: 'ORD-SEGUNDA',
+      chaveIdempotencia: 'k2',
+    };
+    const paga = (id: string, aprovadoEm: string) => ({
+      tipo: 'sucesso',
+      order: {
+        id,
+        status: 'processed',
+        pagamentos: [
+          { id: 'P', status: 'accredited', dateApproved: aprovadoEm },
+        ],
+      },
+    });
+
+    function montar(
+      situacao: SituacaoCobranca,
+      opcoes: { legitima?: unknown; aprovadoEm?: Date | null } = {},
+    ) {
+      const cobranca = new Cobranca({
+        id: 'c1',
+        orcamentoId: 'o1',
+        ordemServicoId: 'os1',
+        rodada: 1,
+        clienteId: 'cl1',
+        correlationId: 'corr',
+        valorTotalCentavos: 5000,
+        prazoPagamento: new Date('2099-01-01T00:00:00.000Z'),
+        situacao,
+        pagamentoConfirmadoEm:
+          opcoes.aprovadoEm === undefined
+            ? new Date('2026-11-15T11:00:00.000Z')
+            : opcoes.aprovadoEm,
+      });
+      const mensagens: Array<{ envelope: { payload: any } }> = [];
+      const consultarOrder = jest.fn(async (orderId: string) =>
+        orderId === 'ORD-LEGITIMA'
+          ? paga('ORD-LEGITIMA', '2026-11-15T11:00:00.000Z')
+          : paga('ORD-SEGUNDA', '2026-11-15T12:00:00.000Z'),
+      );
+      const cancelarOrder = jest.fn();
+      const servico = new ExecutarConsultaSituacaoFinanceiroService(
+        new UnitOfWorkFake(),
+        {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoConsulta,
+            finalidadeConsulta: 'PRAZO_DE_REFERENCIA_VENCIDO',
+          }),
+          concluirConsulta: jest.fn(),
+          incrementarTentativasMercadoPago: jest.fn(),
+          adiarProcessamento: jest.fn(),
+        } as never,
+        {
+          buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(cobranca),
+        } as never,
+        {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderSegunda),
+          buscarQueConfirmouPagamento: jest
+            .fn()
+            .mockResolvedValue(
+              opcoes.legitima === undefined ? orderLegitima : opcoes.legitima,
+            ),
+          desativar: jest.fn(),
+        } as never,
+        { consultarOrder, cancelarOrder } as never,
+        {
+          registrar: jest.fn(async (_ctx, msg) => {
+            mensagens.push(msg);
+          }),
+        } as never,
+        { registrar: jest.fn(), resolverPorOperacao: jest.fn() } as never,
+        5,
+        1000,
+      );
+      return { servico, mensagens, consultarOrder, cancelarOrder };
+    }
+
+    it.each([
+      [SituacaoCobranca.ESTORNADA, 'REALIZADO'],
+      [SituacaoCobranca.PENDENCIA_MANUAL, 'REALIZADO'],
+      [SituacaoCobranca.ESTORNO_EM_ANDAMENTO, 'EM_ANDAMENTO'],
+    ] as const)(
+      '%s: responde com a order legítima, sem consultar a ativa nem cancelar nada',
+      async (situacao, estorno) => {
+        const { servico, mensagens, consultarOrder, cancelarOrder } =
+          montar(situacao);
+
+        await servico.executar('op1');
+
+        expect(consultarOrder).toHaveBeenCalledTimes(1);
+        expect(consultarOrder).toHaveBeenCalledWith('ORD-LEGITIMA');
+        expect(cancelarOrder).not.toHaveBeenCalled();
+        expect(mensagens[0].envelope.payload).toMatchObject({
+          situacaoPagamento: 'PAGO_NO_PRAZO',
+          situacaoEstorno: estorno,
+          orderId: 'ORD-LEGITIMA',
+          aprovadoEm: '2026-11-15T11:00:00.000Z',
+        });
+      },
+    );
+
+    it('pagamento confirmado depois do prazo não é PAGO_NO_PRAZO', async () => {
+      const { servico, mensagens } = montar(SituacaoCobranca.ESTORNADA, {
+        aprovadoEm: new Date('2100-01-01T00:00:00.000Z'),
+      });
+
+      await servico.executar('op1');
+
+      expect(mensagens[0].envelope.payload.situacaoPagamento).toBe(
+        'SEM_PAGAMENTO',
+      );
+    });
+
+    it('sem order legítima ou sem horário de aprovação responde INDETERMINADA sem cancelar', async () => {
+      const semOrder = montar(SituacaoCobranca.PENDENCIA_MANUAL, {
+        legitima: null,
+      });
+      await semOrder.servico.executar('op1');
+      const semHorario = montar(SituacaoCobranca.PENDENCIA_MANUAL, {
+        aprovadoEm: null,
+      });
+      await semHorario.servico.executar('op1');
+
+      for (const { mensagens, cancelarOrder } of [semOrder, semHorario]) {
+        expect(mensagens[0].envelope.payload.situacaoPagamento).toBe(
+          'INDETERMINADA',
+        );
+        expect(cancelarOrder).not.toHaveBeenCalled();
+      }
+    });
+
+    it('consulta da order legítima indeterminada não conclui a operação', async () => {
+      const { servico, mensagens, consultarOrder } = montar(
+        SituacaoCobranca.ESTORNADA,
+      );
+      consultarOrder.mockResolvedValue({
+        tipo: 'indeterminado',
+        motivo: 'timeout',
+      } as never);
+
+      await servico.executar('op1');
+
+      expect(mensagens).toHaveLength(0);
+    });
   });
 });

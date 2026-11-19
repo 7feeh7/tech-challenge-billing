@@ -8,7 +8,15 @@ import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gatewa
 import { ProcessarNotificacaoMercadoPagoUseCase } from '../use-cases/processar-notificacao-mercado-pago.use-case';
 import { ConciliarCobrancaService } from './conciliar-cobranca.service';
 import { ExpirarCobrancaService } from './expirar-cobranca.service';
+import type { RegistrarSegundoPagamentoService } from './registrar-segundo-pagamento.service';
 import { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
+
+const criarSegundoPagamentoStub = (): RegistrarSegundoPagamentoService =>
+  ({
+    orderEhSegundoPagamento: jest.fn().mockResolvedValue(false),
+    registrar: jest.fn().mockResolvedValue(null),
+    iniciarEstorno: jest.fn(),
+  }) as unknown as RegistrarSegundoPagamentoService;
 
 describe('Consistência financeira — E19', () => {
   const prazo = new Date('2099-06-01T00:00:00.000Z');
@@ -58,6 +66,7 @@ describe('Consistência financeira — E19', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(cobranca),
         buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(cobranca),
         atualizar: jest.fn().mockImplementation(async (_c, _id, c) => {
           confirmadoEm = c.pagamentoConfirmadoEm;
@@ -66,6 +75,8 @@ describe('Consistência financeira — E19', () => {
       } as unknown as CobrancaGateway,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(orderAtiva),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -74,11 +85,11 @@ describe('Consistência financeira — E19', () => {
       { executar: jest.fn() } as never,
       new TratarPagamentoTardioService(
         new UnitOfWorkFake(),
-        { buscarPorId: jest.fn() } as never,
+        { buscarPorId: jest.fn(), bloquearParaAtualizacao: jest.fn() } as never,
         {} as never,
         {} as never,
-        { registrar: jest.fn() } as never,
       ),
+      criarSegundoPagamentoStub(),
     );
     const notificacao = new ProcessarNotificacaoMercadoPagoUseCase(
       new UnitOfWorkFake(),
@@ -137,10 +148,13 @@ describe('Consistência financeira — E19', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(cobranca),
         atualizar: jest.fn().mockImplementation(async (_c, _id, c) => c),
       } as unknown as CobrancaGateway,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(orderAtiva),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -148,6 +162,7 @@ describe('Consistência financeira — E19', () => {
       { registrar: jest.fn() } as never,
       { executar: jest.fn() } as never,
       tratar as unknown as TratarPagamentoTardioService,
+      criarSegundoPagamentoStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(tratar.tratar).toHaveBeenCalled();
@@ -189,6 +204,7 @@ describe('Consistência financeira — E19', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(cobranca),
         atualizar: jest.fn(),
         atualizarSePosse: jest.fn().mockResolvedValue(true),
       } as never,
@@ -198,6 +214,12 @@ describe('Consistência financeira — E19', () => {
           mercadoPagoOrderId: 'ORD1',
           chaveIdempotencia: 'chave',
         }),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue({
+          id: 'loc',
+          mercadoPagoOrderId: 'ORD1',
+          chaveIdempotencia: 'chave',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as never,
@@ -208,8 +230,8 @@ describe('Consistência financeira — E19', () => {
         {} as never,
         {} as never,
         {} as never,
-        {} as never,
       ),
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await expirar.expirarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalledWith(
@@ -235,12 +257,18 @@ describe('Consistência financeira — E19', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(cobranca),
       } as never,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
           id: 'loc',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue({
+          id: 'loc',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       } as never,
       {
         consultarOrder: jest.fn().mockResolvedValue({
@@ -259,7 +287,11 @@ describe('Consistência financeira — E19', () => {
         }),
       } as never,
       {} as never,
-      { tratar } as never,
+      {
+        tratar,
+        deveTratarPagamentoTardio: jest.fn().mockReturnValue(true),
+      } as never,
+      { conciliarPorCobrancaId: jest.fn() } as never,
     );
     await servico.expirarPorCobrancaId('c1');
     expect(tratar).toHaveBeenCalled();

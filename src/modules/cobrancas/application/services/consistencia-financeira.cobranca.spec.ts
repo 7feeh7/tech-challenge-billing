@@ -19,6 +19,14 @@ const criarPagamentoTardioStub = (): TratarPagamentoTardioService =>
   }) as unknown as TratarPagamentoTardioService;
 
 import { CriarOrderMercadoPagoService } from './criar-order-mercado-pago.service';
+import type { RegistrarSegundoPagamentoService } from './registrar-segundo-pagamento.service';
+
+const criarSegundoPagamentoStub = (): RegistrarSegundoPagamentoService =>
+  ({
+    orderEhSegundoPagamento: jest.fn().mockResolvedValue(false),
+    registrar: jest.fn().mockResolvedValue(null),
+    iniciarEstorno: jest.fn(),
+  }) as unknown as RegistrarSegundoPagamentoService;
 
 describe('Consistência financeira — cobrança (E17)', () => {
   const prazoOriginal = new Date('2099-06-01T00:00:00.000Z');
@@ -91,11 +99,14 @@ describe('Consistência financeira — cobrança (E17)', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(intencao),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(intencao),
         atualizar: jest.fn().mockImplementation(async (_c, _id, c) => c),
       } as unknown as CobrancaGateway,
       operacoes,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(null),
+        marcarConfirmouPagamento: jest.fn(),
         criar: jest.fn().mockResolvedValue({ id: 'omp1' }),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -128,6 +139,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
     });
     const cobrancas = {
       buscarPorId: jest.fn().mockResolvedValue(intencao),
+      bloquearParaAtualizacao: jest.fn().mockResolvedValue(intencao),
       atualizar: jest.fn().mockImplementation(async (_c, _id, c) => c),
     };
     const orders = {
@@ -138,6 +150,14 @@ describe('Consistência financeira — cobrança (E17)', () => {
           checkoutUrl: 'https://checkout/recuperado',
         })
         .mockResolvedValue(null),
+      buscarPorMercadoPagoOrderId: jest
+        .fn()
+        .mockResolvedValueOnce({
+          mercadoPagoOrderId: 'ORD1',
+          checkoutUrl: 'https://checkout/recuperado',
+        })
+        .mockResolvedValue(null),
+      marcarConfirmouPagamento: jest.fn(),
       criar: jest.fn(),
     };
     const servico = new CriarOrderMercadoPagoService(
@@ -189,6 +209,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
       uow as never,
       {
         buscarPorId: jest.fn().mockResolvedValue(intencao),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(intencao),
         atualizar: jest.fn(),
       } as unknown as CobrancaGateway,
       {
@@ -199,7 +220,11 @@ describe('Consistência financeira — cobrança (E17)', () => {
         }),
         marcarConcluida: jest.fn(),
       },
-      { buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null) } as never,
+      {
+        buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(null),
+        marcarConfirmouPagamento: jest.fn(),
+      } as never,
       mercadoPago,
       { registrar: jest.fn() },
       { existe: jest.fn().mockResolvedValue(false) },
@@ -230,6 +255,9 @@ describe('Consistência financeira — cobrança (E17)', () => {
     let situacaoAtual: Cobranca = cobrancaPendente;
     const cobrancas: CobrancaGateway = {
       buscarPorId: jest.fn().mockImplementation(async () => situacaoAtual),
+      bloquearParaAtualizacao: jest
+        .fn()
+        .mockImplementation(async () => situacaoAtual),
       atualizar: jest.fn().mockImplementation(async (_c, _id, c) => {
         situacaoAtual = c;
         return c;
@@ -240,6 +268,8 @@ describe('Consistência financeira — cobrança (E17)', () => {
       cobrancas,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(order),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -249,6 +279,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
       criarPagamentoTardioStub(),
+      criarSegundoPagamentoStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     await conciliar.conciliarPorCobrancaId('c1');
@@ -277,11 +308,14 @@ describe('Consistência financeira — cobrança (E17)', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockResolvedValue(paga),
+        bloquearParaAtualizacao: jest.fn().mockResolvedValue(paga),
         buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(paga),
         atualizar: jest.fn(),
       } as unknown as CobrancaGateway,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(order),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -291,6 +325,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
       criarPagamentoTardioStub(),
+      criarSegundoPagamentoStub(),
     );
     const caso = new ProcessarNotificacaoMercadoPagoUseCase(
       new UnitOfWorkFake(),
@@ -353,6 +388,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
     };
     const cobrancas: CobrancaGateway = {
       buscarPorId: jest.fn().mockResolvedValue(cobrancaPendente),
+      bloquearParaAtualizacao: jest.fn().mockResolvedValue(cobrancaPendente),
       atualizar: jest.fn().mockImplementation(async (_c, _id, c) => c),
     };
     const conciliar = new ConciliarCobrancaService(
@@ -360,6 +396,8 @@ describe('Consistência financeira — cobrança (E17)', () => {
       cobrancas,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(order),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -369,6 +407,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
       criarPagamentoTardioStub(),
+      criarSegundoPagamentoStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(tentativas.registrarSeNova).toHaveBeenCalled();
@@ -411,12 +450,17 @@ describe('Consistência financeira — cobrança (E17)', () => {
       new UnitOfWorkFake(),
       {
         buscarPorId: jest.fn().mockImplementation(async () => estado),
+        bloquearParaAtualizacao: jest
+          .fn()
+          .mockImplementation(async () => estado),
         atualizar: jest.fn().mockImplementation(async (_c, _id, c) => {
           estado = c;
         }),
       } as unknown as CobrancaGateway,
       {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(order),
+        buscarPorMercadoPagoOrderId: jest.fn().mockResolvedValue(order),
+        marcarConfirmouPagamento: jest.fn(),
         atualizarSituacao: jest.fn(),
       } as unknown as OrderMercadoPagoGateway,
       mercadoPago,
@@ -426,6 +470,7 @@ describe('Consistência financeira — cobrança (E17)', () => {
         executar: jest.fn(),
       } as unknown as import('./reemitir-order-mercado-pago.service').ReemitirOrderMercadoPagoService,
       criarPagamentoTardioStub(),
+      criarSegundoPagamentoStub(),
     );
     await conciliar.conciliarPorCobrancaId('c1');
     expect(outbox.registrar).toHaveBeenCalledTimes(1);

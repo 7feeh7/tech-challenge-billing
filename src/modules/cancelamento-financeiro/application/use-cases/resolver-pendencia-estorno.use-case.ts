@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
+import type { EstornoAutomaticoGateway } from '@/modules/cobrancas/application/ports/estorno-automatico.gateway';
 import type { OrderMercadoPagoGateway } from '@/modules/cobrancas/application/ports/order-mercado-pago.gateway';
 import { Cobranca } from '@/modules/cobrancas/domain/entities/cobranca.entity';
 import { SituacaoCobranca } from '@/modules/cobrancas/domain/situacao-cobranca';
@@ -16,6 +17,7 @@ import {
 import {
   PendenciaEstornoJaResolvidaError,
   PendenciaEstornoNaoEncontradaError,
+  PendenciaEstornoSemPagamentoError,
 } from '../../domain/errors/pendencia.errors';
 import type {
   DecisaoPendenciaRegistro,
@@ -37,6 +39,7 @@ export class ResolverPendenciaEstornoUseCase {
     private readonly cobrancas: CobrancaGateway,
     private readonly orders: OrderMercadoPagoGateway,
     private readonly outbox: OutboxGateway,
+    private readonly estornosAutomaticos: EstornoAutomaticoGateway,
   ) {}
 
   async execute(input: ResolverPendenciaEstornoInput): Promise<void> {
@@ -71,6 +74,21 @@ export class ResolverPendenciaEstornoUseCase {
       );
     }
 
+    // Pendência de estorno automático (segundo pagamento ou pagamento tardio)
+    // pertence à order estornada, não à cobrança legítima.
+    const estornoAutomatico =
+      await this.estornosAutomaticos.buscarPorPendenciaId(pendencia.id);
+
+    // Estornar ou publicar EstornoConcluido de cobrança sem pagamento
+    // confirmado criaria estorno de dinheiro que nunca entrou.
+    if (
+      input.decisao !== 'SEM_ESTORNO' &&
+      !estornoAutomatico &&
+      !cobranca.pagamentoConfirmado()
+    ) {
+      throw new PendenciaEstornoSemPagamentoError(input.pendenciaId);
+    }
+
     const eventoPendenciaId = randomUUID();
     const eventoEstornoId = randomUUID();
 
@@ -82,7 +100,13 @@ export class ResolverPendenciaEstornoUseCase {
         justificativa: input.justificativa,
       });
 
-      if (input.decisao !== 'SEM_ESTORNO') {
+      // Resolvida a pendência, a order do estorno automático deixa de ser
+      // candidata a cancelamento ou conciliação: nada mais a espera.
+      if (estornoAutomatico) {
+        await this.orders.desativar(ctx, estornoAutomatico.orderMercadoPagoId);
+      }
+
+      if (input.decisao !== 'SEM_ESTORNO' && !estornoAutomatico) {
         const copia = this.clonar(cobranca);
         if (copia.situacao === SituacaoCobranca.PENDENCIA_MANUAL) {
           copia.marcarEstornada();
@@ -119,9 +143,10 @@ export class ResolverPendenciaEstornoUseCase {
         input.decisao === 'ESTORNO_INTEGRAL' ||
         input.decisao === 'ESTORNO_PARCIAL'
       ) {
-        const order = await this.orders.buscarUltimaPorCobrancaId(
-          cobranca.id as string,
-        );
+        const mercadoPagoOrderId =
+          estornoAutomatico?.mercadoPagoOrderId ??
+          (await this.orders.buscarQueConfirmouPagamento(cobranca.id as string))
+            ?.mercadoPagoOrderId;
         const envelopeEstorno: EnvelopeMensagem<PayloadEstornoConcluido> = {
           eventId: eventoEstornoId,
           eventType: EVENTO_ESTORNO_CONCLUIDO,
@@ -134,12 +159,13 @@ export class ResolverPendenciaEstornoUseCase {
           rodada: cobranca.rodada,
           payload: {
             cobrancaId: cobranca.id as string,
-            orderId: order?.mercadoPagoOrderId ?? '',
+            orderId: mercadoPagoOrderId ?? '',
             valorEstornadoCentavos: valorEstornado ?? 0,
             estornadoEm: new Date().toISOString(),
             tipoEstorno:
               input.decisao === 'ESTORNO_INTEGRAL' ? 'INTEGRAL' : 'PARCIAL',
             statusOrderMercadoPago: 'refunded',
+            origemEstorno: 'PENDENCIA_RESOLVIDA',
           },
         };
 

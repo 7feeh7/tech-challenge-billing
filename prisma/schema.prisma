@@ -92,6 +92,17 @@ enum TipoItemOrcamento {
   PECA
 }
 
+enum TipoEstornoAutomatico {
+  SEGUNDO_PAGAMENTO
+  PAGAMENTO_TARDIO
+}
+
+enum SituacaoEstornoAutomatico {
+  EM_ANDAMENTO
+  CONCLUIDO
+  PENDENCIA_MANUAL
+}
+
 model Orcamento {
   id                 String            @id @default(uuid()) @db.Uuid
   ordemServicoId     String            @map("ordem_servico_id") @db.Uuid
@@ -139,6 +150,7 @@ model Cobranca {
   operacaoCriacaoOrder   OperacaoCriacaoOrder?
   tentativasRecusadas    TentativaPagamentoRecusada[]
   avisosWebhook          AvisoWebhookMercadoPago[]
+  estornosAutomaticos    EstornoAutomatico[]
 
   @@index([situacao, bloqueadoConciliacaoAte])
   @@index([ordemServicoId])
@@ -154,11 +166,13 @@ model OrderMercadoPago {
   statusOrder           String?  @map("status_order")
   statusDetail          String?  @map("status_detail")
   ativa                 Boolean  @default(true)
+  confirmouPagamento    Boolean  @default(false) @map("confirmou_pagamento")
   criadoEm              DateTime @default(now()) @map("criado_em")
   atualizadoEm          DateTime @updatedAt @map("atualizado_em")
 
   cobranca           Cobranca                     @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
   tentativasRecusadas TentativaPagamentoRecusada[]
+  estornoAutomatico  EstornoAutomatico?
 
   @@index([cobrancaId, ativa])
   @@map("orders_mercado_pago")
@@ -294,11 +308,36 @@ model PendenciaEstorno {
   criadoEm               DateTime                @default(now()) @map("criado_em")
   atualizadoEm           DateTime                @updatedAt @map("atualizado_em")
 
-  operacoes OperacaoFinanceira[]
+  operacoes           OperacaoFinanceira[]
+  estornosAutomaticos EstornoAutomatico[]
 
   @@index([situacao])
   @@index([ordemServicoId])
   @@map("pendencias_estorno")
+}
+
+model EstornoAutomatico {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  cobrancaId                String                    @map("cobranca_id") @db.Uuid
+  orderMercadoPagoId        String                    @unique @map("order_mercado_pago_id") @db.Uuid
+  tipo                      TipoEstornoAutomatico
+  situacao                  SituacaoEstornoAutomatico @default(EM_ANDAMENTO)
+  chaveIdempotencia         String                    @unique @map("chave_idempotencia") @db.Uuid
+  valorCentavos             Int                       @map("valor_centavos")
+  aprovadoEm                DateTime                  @map("aprovado_em")
+  tentativas                Int                       @default(0)
+  bloqueadoProcessamentoAte DateTime?                 @map("bloqueado_processamento_ate")
+  pendenciaId               String?                   @map("pendencia_id") @db.Uuid
+  criadoEm                  DateTime                  @default(now()) @map("criado_em")
+  atualizadoEm              DateTime                  @updatedAt @map("atualizado_em")
+
+  cobranca         Cobranca          @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  orderMercadoPago OrderMercadoPago  @relation(fields: [orderMercadoPagoId], references: [id], onDelete: Cascade)
+  pendencia        PendenciaEstorno? @relation(fields: [pendenciaId], references: [id], onDelete: SetNull)
+
+  @@index([situacao, bloqueadoProcessamentoAte])
+  @@index([pendenciaId])
+  @@map("estornos_automaticos")
 }
 
 model MensagemProcessada {

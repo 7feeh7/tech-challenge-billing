@@ -15,9 +15,13 @@ import { interpretarSituacaoFinanceira } from '../../domain/interpretar-situacao
 import { SituacaoCobranca } from '../../domain/situacao-cobranca';
 import type { CobrancaGateway } from '../ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '../ports/mercado-pago.gateway';
-import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gateway';
+import type {
+  OrderMercadoPagoGateway,
+  OrderMercadoPagoRegistro,
+} from '../ports/order-mercado-pago.gateway';
 import type { TentativaRecusaGateway } from '../ports/tentativa-recusa.gateway';
 import type { ReemitirOrderMercadoPagoService } from './reemitir-order-mercado-pago.service';
+import type { RegistrarSegundoPagamentoService } from './registrar-segundo-pagamento.service';
 import type { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
 
 export class ConciliarCobrancaService {
@@ -30,19 +34,26 @@ export class ConciliarCobrancaService {
     private readonly outbox: OutboxGateway,
     private readonly reemitir: ReemitirOrderMercadoPagoService,
     private readonly pagamentoTardio: TratarPagamentoTardioService,
+    private readonly segundoPagamento: RegistrarSegundoPagamentoService,
   ) {}
 
-  async conciliarPorCobrancaId(cobrancaId: string): Promise<void> {
+  // `orderAvisada` é a order do webhook: pode não ser a ativa (por exemplo, uma
+  // order anterior paga depois da reemissão) e é ela que a consulta confirma.
+  async conciliarPorCobrancaId(
+    cobrancaId: string,
+    orderAvisada?: OrderMercadoPagoRegistro,
+  ): Promise<void> {
     const cobranca = await this.cobrancas.buscarPorId(cobrancaId);
     if (!cobranca?.id) return;
     const posseAte = this.posseReivindicacaoAtiva(cobranca);
 
-    if (cobranca.jaPaga()) {
+    if (await this.nadaAConciliar(cobranca, orderAvisada)) {
       await this.liberarBloqueio(cobranca, posseAte);
       return;
     }
 
-    const order = await this.orders.buscarAtivaPorCobrancaId(cobrancaId);
+    const order =
+      orderAvisada ?? (await this.orders.buscarAtivaPorCobrancaId(cobrancaId));
     if (!order) {
       await this.liberarBloqueio(cobranca, posseAte);
       return;
@@ -64,7 +75,13 @@ export class ConciliarCobrancaService {
         posseAte: Date | null;
       } | null = null;
       let pedidoPagamentoTardio = false;
-      const atual = await this.cobrancas.buscarPorId(cobrancaId);
+      let estornoSegundoPagamentoId: string | null = null;
+      // Bloqueada a linha, duas conciliações de orders da mesma cobrança não
+      // confirmam pagamento ao mesmo tempo: a segunda vê a primeira confirmada.
+      const atual = await this.cobrancas.bloquearParaAtualizacao(
+        ctx,
+        cobrancaId,
+      );
       if (!atual?.id) return { pedidoReemissao, pedidoPagamentoTardio };
 
       if (order.id) {
@@ -76,10 +93,23 @@ export class ConciliarCobrancaService {
         );
       }
 
-      if (atual.jaPaga()) {
+      if (atual.pagamentoConfirmado()) {
+        if (
+          interpretacao.tipo === 'paga' &&
+          (await this.segundoPagamento.orderEhSegundoPagamento(atual, order))
+        ) {
+          estornoSegundoPagamentoId = await this.segundoPagamento.registrar(
+            ctx,
+            { cobranca: atual, order, aprovadoEm: interpretacao.aprovadoEm },
+          );
+        }
         atual.liberarBloqueioConciliacao();
         await this.gravarCobranca(ctx, cobrancaId, atual, posseAte);
-        return { pedidoReemissao, pedidoPagamentoTardio };
+        return {
+          pedidoReemissao,
+          pedidoPagamentoTardio,
+          estornoSegundoPagamentoId,
+        };
       }
 
       if (interpretacao.tipo === 'paga') {
@@ -99,6 +129,9 @@ export class ConciliarCobrancaService {
         copia.confirmarPagamento(interpretacao.aprovadoEm);
         if (!(await this.gravarCobranca(ctx, cobrancaId, copia, posseAte))) {
           return { pedidoReemissao, pedidoPagamentoTardio };
+        }
+        if (order.id) {
+          await this.orders.marcarConfirmouPagamento(ctx, order.id);
         }
 
         const eventId = randomUUID();
@@ -166,15 +199,20 @@ export class ConciliarCobrancaService {
       return { pedidoReemissao, pedidoPagamentoTardio };
     });
 
+    if (acaoAposCommit.estornoSegundoPagamentoId) {
+      await this.segundoPagamento.iniciarEstorno(
+        acaoAposCommit.estornoSegundoPagamentoId,
+      );
+      return;
+    }
+
     if (acaoAposCommit.pedidoPagamentoTardio && order.id) {
       await this.pagamentoTardio.tratar({
         cobrancaId,
         posseAte,
         orderId: order.id,
-        mercadoPagoOrderId: order.mercadoPagoOrderId,
         aprovadoEm:
           interpretacao.tipo === 'paga' ? interpretacao.aprovadoEm : new Date(),
-        orderConsultada: consulta.order,
       });
       return;
     }
@@ -193,8 +231,25 @@ export class ConciliarCobrancaService {
     const cobranca =
       await this.cobrancas.buscarPorMercadoPagoOrderId(mercadoPagoOrderId);
     if (!cobranca?.id) return null;
-    await this.conciliarPorCobrancaId(cobranca.id);
+    const orderAvisada =
+      await this.orders.buscarPorMercadoPagoOrderId(mercadoPagoOrderId);
+    await this.conciliarPorCobrancaId(cobranca.id, orderAvisada ?? undefined);
     return await this.cobrancas.buscarPorId(cobranca.id);
+  }
+
+  // Sem order avisada (conciliação periódica), a cobrança paga não tem o que
+  // conciliar. Com ela, só a order que confirmou o pagamento está resolvida:
+  // qualquer outra order paga é segundo pagamento e precisa ser consultada.
+  private async nadaAConciliar(
+    cobranca: Cobranca,
+    orderAvisada?: OrderMercadoPagoRegistro,
+  ): Promise<boolean> {
+    if (!orderAvisada) return cobranca.jaPaga();
+    if (!cobranca.pagamentoConfirmado()) return false;
+    return !(await this.segundoPagamento.orderEhSegundoPagamento(
+      cobranca,
+      orderAvisada,
+    ));
   }
 
   private async liberarBloqueio(

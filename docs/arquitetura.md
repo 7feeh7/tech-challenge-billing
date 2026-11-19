@@ -6,6 +6,8 @@ Repositório autônomo (`tech-challenge-billing`) na Fase 4. Referência de padr
 
 Dono de orçamentos, aprovação, cobrança, estorno e pendências manuais. A E15 entrega geração por mensagem, consulta HTTP e rejeição com outbox e consumidor SQS no processo.
 
+O estorno automático de segundo pagamento e de pagamento tardio, a retomada de estornos indeterminados e o isolamento dos lotes estão em [estorno-automatico.md](estorno-automatico.md).
+
 ## Estrutura de código
 
 Clean Architecture por módulo em `src/modules/` (`domain/`, `application/`, `infra/` nas etapas de negócio). Código transversal em `src/shared/`.
