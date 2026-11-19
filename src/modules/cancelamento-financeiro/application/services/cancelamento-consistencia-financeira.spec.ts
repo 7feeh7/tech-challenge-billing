@@ -64,14 +64,25 @@ describe('Consistência financeira E18 (cancelamento)', () => {
           id: 'omp',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       } as never,
       { cancelarOrder, consultarOrder, estornarTotal: jest.fn() } as never,
-      { criar: jest.fn() } as never,
+      {
+        criar: jest.fn(),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     expect(cancelarOrder).toHaveBeenCalledWith('ORD1', 'chave-fixa');
@@ -146,13 +157,24 @@ describe('Consistência financeira E18 (cancelamento)', () => {
           id: 'omp',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       } as never,
       { cancelarOrder, consultarOrder, estornarTotal: jest.fn() } as never,
-      { criar: jest.fn() } as never,
+      {
+        criar: jest.fn(),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     expect(adiar).toHaveBeenCalled();
@@ -194,14 +216,25 @@ describe('Consistência financeira E18 (cancelamento)', () => {
           id: 'omp',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       } as never,
       { cancelarOrder, consultarOrder, estornarTotal: jest.fn() } as never,
-      { criar: jest.fn() } as never,
+      {
+        criar: jest.fn(),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     await servico.executar('op1');
@@ -246,17 +279,28 @@ describe('Consistência financeira E18 (cancelamento)', () => {
           id: 'omp',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       } as never,
       {
         cancelarOrder: jest.fn(),
         consultarOrder,
         estornarTotal,
       } as never,
-      { criar: jest.fn() } as never,
+      {
+        criar: jest.fn(),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     expect(estornarTotal).toHaveBeenCalledWith('ORD1', 'chave-fixa');
@@ -299,17 +343,28 @@ describe('Consistência financeira E18 (cancelamento)', () => {
           id: 'omp',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       } as never,
       {
         cancelarOrder: jest.fn(),
         estornarTotal,
         consultarOrder: jest.fn(),
       } as never,
-      { criar: pendenciaCriar } as never,
+      {
+        criar: pendenciaCriar,
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     expect(pendenciaCriar).toHaveBeenCalled();

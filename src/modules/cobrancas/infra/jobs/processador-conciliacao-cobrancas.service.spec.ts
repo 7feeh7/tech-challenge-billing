@@ -47,4 +47,49 @@ describe('ProcessadorConciliacaoCobrancasService', () => {
     expect(servico['intervalo']).toBeDefined();
     servico.onModuleDestroy();
   });
+
+  it('a falha de uma cobrança não interrompe as demais e fica registrada', async () => {
+    const dependencia = {
+      conciliarPorCobrancaId: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('falha em c1'))
+        .mockResolvedValue(undefined),
+    };
+    const cobrancas = {
+      reivindicarPendentesConciliacao: jest.fn().mockResolvedValue([
+        {
+          id: 'c1',
+          ordemServicoId: 'os1',
+          rodada: 2,
+          correlationId: 'corr1',
+        },
+        { id: 'c2', ordemServicoId: 'os2', rodada: 1, correlationId: 'corr2' },
+      ]),
+    };
+    const servico = new ProcessadorConciliacaoCobrancasService(
+      { get: () => undefined } as never,
+      dependencia as never,
+      cobrancas as never,
+    );
+    const erros = jest
+      .spyOn(
+        (servico as unknown as { logger: { error: () => void } }).logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+
+    await servico.processarLote();
+
+    expect(dependencia.conciliarPorCobrancaId).toHaveBeenCalledTimes(2);
+    expect(dependencia.conciliarPorCobrancaId).toHaveBeenLastCalledWith('c2');
+    expect(JSON.parse(erros.mock.calls[0][0] as string)).toEqual({
+      evento: 'falha_item_lote',
+      processador: 'ProcessadorConciliacaoCobrancasService',
+      itemId: 'c1',
+      ordemServicoId: 'os1',
+      rodada: 2,
+      correlationId: 'corr1',
+      erro: 'Error',
+    });
+  });
 });

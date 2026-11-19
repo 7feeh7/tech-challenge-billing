@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
+import type { EstornoAutomaticoGateway } from '@/modules/cobrancas/application/ports/estorno-automatico.gateway';
 import type { MercadoPagoGateway } from '@/modules/cobrancas/application/ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from '@/modules/cobrancas/application/ports/operacao-criacao-order.gateway';
 import type { OrderMercadoPagoGateway } from '@/modules/cobrancas/application/ports/order-mercado-pago.gateway';
@@ -49,6 +50,7 @@ function criarServico(deps: {
   operacoesCriacao?: Partial<OperacaoCriacaoOrderGateway>;
   pendencias?: Partial<PendenciaEstornoGateway>;
   outbox?: OutboxGateway;
+  estornosAutomaticos?: Partial<EstornoAutomaticoGateway>;
 }) {
   const outboxRegistros: string[] = [];
   const outbox: OutboxGateway =
@@ -76,6 +78,7 @@ function criarServico(deps: {
 
   const pendencias: PendenciaEstornoGateway = {
     criar: jest.fn(),
+    buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
     ...deps.pendencias,
   } as PendenciaEstornoGateway;
 
@@ -91,6 +94,8 @@ function criarServico(deps: {
     }) as OperacaoCriacaoOrderGateway,
     (deps.orders ?? {
       buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(null),
+      marcarConfirmouPagamento: jest.fn(),
       desativar: jest.fn(),
     }) as OrderMercadoPagoGateway,
     (deps.mp ?? {
@@ -103,6 +108,9 @@ function criarServico(deps: {
     100,
     5,
     50,
+    (deps.estornosAutomaticos ?? {
+      buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+    }) as EstornoAutomaticoGateway,
   );
 
   return { servico, operacoes, cobrancas, outboxRegistros, outbox, pendencias };
@@ -166,6 +174,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       },
     });
@@ -193,6 +206,7 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
       },
       pendencias: {
         criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
       },
       mp,
     });
@@ -235,7 +249,10 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
             .fn()
             .mockResolvedValue(cobrancaPaga),
         },
-        pendencias: { criar: jest.fn().mockResolvedValue({ id: 'pend1' }) },
+        pendencias: {
+          criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+          buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        },
       });
 
       await servico.executar('op1');
@@ -272,13 +289,21 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
             id: 'omp1',
             mercadoPagoOrderId: 'ORD1',
           }),
+          buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+            id: 'omp1',
+            mercadoPagoOrderId: 'ORD1',
+          }),
+          marcarConfirmouPagamento: jest.fn(),
         },
         mp: {
           estornarTotal: jest
             .fn()
             .mockResolvedValue({ tipo: 'indeterminado', motivo: 'x' }),
         },
-        pendencias: { criar: jest.fn().mockResolvedValue({ id: 'pend1' }) },
+        pendencias: {
+          criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+          buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        },
       });
 
       await servico.executar('op1');
@@ -316,6 +341,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
             id: 'omp1',
             mercadoPagoOrderId: 'ORD1',
           }),
+          buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+            id: 'omp1',
+            mercadoPagoOrderId: 'ORD1',
+          }),
+          marcarConfirmouPagamento: jest.fn(),
         },
         mp: {
           estornarTotal: jest
@@ -383,6 +413,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       },
       mp,
@@ -409,6 +444,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       },
     });
@@ -428,6 +468,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -514,6 +559,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
       mp: {
         estornarTotal: jest
@@ -522,6 +572,7 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
       },
       pendencias: {
         criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
       },
     });
     await servico.executar('op1');
@@ -554,6 +605,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       },
       mp,
@@ -605,14 +661,25 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       } as never,
       mp as never,
-      { criar: jest.fn() } as never,
+      {
+        criar: jest.fn(),
+        buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+      } as never,
       { registrar: jest.fn() } as never,
       100,
       5,
       50,
+      {
+        buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue(null),
+      } as never,
     );
     await servico.executar('op1');
     await servico.executar('op1');
@@ -635,6 +702,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -699,6 +771,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -718,6 +795,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -736,7 +818,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
         buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(cobrancaPaga),
         buscarPorId: jest.fn().mockResolvedValue(cobrancaPaga),
       },
-      orders: { buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null) },
+      orders: {
+        buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(null),
+        marcarConfirmouPagamento: jest.fn(),
+      },
     });
     await servico.executar('op1');
     expect(cobrancas.atualizar).toHaveBeenCalled();
@@ -765,6 +851,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
       mp,
     });
@@ -788,6 +879,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -816,6 +912,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
       mp,
     });
@@ -843,6 +944,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
       mp: { estornarTotal, consultarOrder: jest.fn() },
     });
@@ -865,6 +971,11 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           id: 'omp1',
           mercadoPagoOrderId: 'ORD1',
         }),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue({
+          id: 'omp1',
+          mercadoPagoOrderId: 'ORD1',
+        }),
+        marcarConfirmouPagamento: jest.fn(),
       },
     });
     await servico.executar('op1');
@@ -938,6 +1049,8 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
       };
       const orders = {
         buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+        buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(orderAtiva),
+        marcarConfirmouPagamento: jest.fn(),
         desativar: jest.fn(),
       };
       const { servico, operacoes, cobrancas, outboxRegistros } =
@@ -975,6 +1088,8 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
         };
         const orders = {
           buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+          buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(orderAtiva),
+          marcarConfirmouPagamento: jest.fn(),
           desativar: jest.fn(),
         };
         const { servico, operacoes, cobrancas, outboxRegistros } =
@@ -1013,6 +1128,10 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           mp,
           orders: {
             buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+            buscarQueConfirmouPagamento: jest
+              .fn()
+              .mockResolvedValue(orderAtiva),
+            marcarConfirmouPagamento: jest.fn(),
           },
         });
 
@@ -1043,6 +1162,10 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
           },
           orders: {
             buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+            buscarQueConfirmouPagamento: jest
+              .fn()
+              .mockResolvedValue(orderAtiva),
+            marcarConfirmouPagamento: jest.fn(),
             desativar: jest.fn(),
           },
         });
@@ -1053,6 +1176,480 @@ describe('ExecutarCancelamentoFinanceiroService', () => {
       expect(operacoes.concluir).toHaveBeenCalledTimes(1);
       expect(mp.cancelarOrder).toHaveBeenCalledTimes(1);
       expect(outboxRegistros).toEqual([EVENTO_RESPOSTA_CANCELAMENTO]);
+    });
+  });
+
+  describe('estorno parado em ESTORNO_EM_ANDAMENTO', () => {
+    const cobrancaEstornando = new Cobranca({
+      ...cobrancaPendente,
+      situacao: SituacaoCobranca.ESTORNO_EM_ANDAMENTO,
+      pagamentoConfirmadoEm: new Date('2026-11-15T12:00:00.000Z'),
+    });
+    const orderLegitima = {
+      id: 'omp1',
+      mercadoPagoOrderId: 'ORD1',
+      confirmouPagamento: true,
+    };
+    const orderEstornada = {
+      tipo: 'sucesso',
+      order: { id: 'ORD1', status: 'refunded', pagamentos: [] },
+    };
+    const orderPaga = {
+      tipo: 'sucesso',
+      order: { id: 'ORD1', status: 'processed', pagamentos: [] },
+    };
+
+    function montar(opcoes: {
+      consultas: unknown[];
+      tentativasMercadoPago?: number;
+      estornarTotal?: unknown;
+    }) {
+      const consultarOrder = jest.fn();
+      for (const consulta of opcoes.consultas) {
+        consultarOrder.mockResolvedValueOnce(consulta);
+      }
+      const estornarTotal = jest
+        .fn()
+        .mockResolvedValue(opcoes.estornarTotal ?? { tipo: 'sucesso' });
+      const desativar = jest.fn();
+      const criacao = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            tentativasMercadoPago: opcoes.tentativasMercadoPago ?? 0,
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest
+            .fn()
+            .mockResolvedValue(cobrancaEstornando),
+          buscarPorId: jest.fn().mockResolvedValue(cobrancaEstornando),
+        },
+        orders: {
+          buscarQueConfirmouPagamento: jest
+            .fn()
+            .mockResolvedValue(orderLegitima),
+          marcarConfirmouPagamento: jest.fn(),
+          desativar,
+        },
+        mp: { consultarOrder, estornarTotal },
+        pendencias: {
+          criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+          buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        },
+      });
+      return { ...criacao, consultarOrder, estornarTotal, desativar };
+    }
+
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('com estorno integral confirmado conclui a operação com ESTORNADA sem repetir o pedido', async () => {
+      const { servico, estornarTotal, operacoes, cobrancas, desativar } =
+        montar({ consultas: [orderEstornada] });
+
+      await servico.executar('op1');
+
+      expect(estornarTotal).not.toHaveBeenCalled();
+      const [, , gravada] = (cobrancas.atualizar as jest.Mock).mock.calls[0];
+      expect(gravada.situacao).toBe(SituacaoCobranca.ESTORNADA);
+      expect(desativar).toHaveBeenCalledWith(expect.anything(), 'omp1');
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        { cobrancaId: 'c1', resultado: 'ESTORNADA', pendenciaId: null },
+      );
+    });
+
+    it('sem estorno repete o pedido com a mesma chave de idempotência da operação', async () => {
+      const { servico, estornarTotal, operacoes } = montar({
+        consultas: [orderPaga, orderEstornada],
+      });
+
+      await servico.executar('op1');
+
+      expect(estornarTotal).toHaveBeenCalledWith('ORD1', 'chave-mp');
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        expect.objectContaining({ resultado: 'ESTORNADA' }),
+      );
+    });
+
+    it('ainda indeterminado antes do máximo de tentativas adia e não responde ao OS', async () => {
+      const { servico, operacoes, outboxRegistros } = montar({
+        consultas: [orderPaga, orderPaga],
+        tentativasMercadoPago: 1,
+      });
+
+      await servico.executar('op1');
+
+      expect(operacoes.incrementarTentativasMercadoPago).toHaveBeenCalledWith(
+        'op1',
+      );
+      expect(operacoes.adiarProcessamento).toHaveBeenCalled();
+      expect(operacoes.concluir).not.toHaveBeenCalled();
+      expect(outboxRegistros).toHaveLength(0);
+    });
+
+    it('ainda indeterminado no máximo de tentativas abre pendência manual, responde PENDENCIA_MANUAL_ABERTA e emite o sinal', async () => {
+      const { servico, operacoes, pendencias, cobrancas } = montar({
+        consultas: [orderPaga, orderPaga],
+        tentativasMercadoPago: 4,
+      });
+
+      await servico.executar('op1');
+
+      expect(pendencias.criar).toHaveBeenCalledTimes(1);
+      const [, , gravada] = (cobrancas.atualizar as jest.Mock).mock.calls.at(
+        -1,
+      );
+      expect(gravada.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        {
+          cobrancaId: 'c1',
+          resultado: 'PENDENCIA_MANUAL_ABERTA',
+          pendenciaId: 'pend1',
+        },
+      );
+      const metricas = (Logger.prototype.warn as jest.Mock).mock.calls.map(
+        ([mensagem]) => JSON.parse(mensagem).metric,
+      );
+      expect(metricas).toContain('billing.operacao_financeira_indeterminada');
+    });
+
+    it('estorna a order que confirmou o pagamento, nunca outra da cobrança', async () => {
+      const { servico, estornarTotal } = montar({
+        consultas: [orderPaga, orderEstornada],
+      });
+
+      await servico.executar('op1');
+
+      expect(estornarTotal).toHaveBeenCalledTimes(1);
+      expect(estornarTotal.mock.calls[0][0]).toBe('ORD1');
+    });
+  });
+
+  describe('pendência manual de cobrança ainda sem pagamento confirmado', () => {
+    const orderAtiva = { id: 'omp1', mercadoPagoOrderId: 'ORD1' };
+    const consultaPaga = {
+      tipo: 'sucesso',
+      order: {
+        id: 'ORD1',
+        status: 'processed',
+        pagamentos: [
+          {
+            id: 'PAY1',
+            status: 'accredited',
+            dateApproved: '2026-11-15T12:00:00.000Z',
+          },
+        ],
+      },
+    };
+
+    function montar(
+      situacao: SituacaoCobranca,
+      consulta: unknown = consultaPaga,
+      estornosAutomaticos?: Partial<EstornoAutomaticoGateway>,
+    ) {
+      const cobranca = new Cobranca({ ...cobrancaPendente, situacao });
+      const marcarConfirmouPagamento = jest.fn();
+      const criacao = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            tentativasMercadoPago: 4,
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(cobranca),
+          buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        },
+        orders: {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue(orderAtiva),
+          buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(orderAtiva),
+          marcarConfirmouPagamento,
+          desativar: jest.fn(),
+        },
+        mp: {
+          cancelarOrder: jest
+            .fn()
+            .mockResolvedValue({ tipo: 'indeterminado', motivo: 'x' }),
+          consultarOrder: jest.fn().mockResolvedValue(consulta),
+        },
+        pendencias: {
+          criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+          buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        },
+        estornosAutomaticos,
+      });
+      return { ...criacao, marcarConfirmouPagamento };
+    }
+
+    beforeEach(() => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it.each([SituacaoCobranca.PENDENTE, SituacaoCobranca.EXPIRADA])(
+      'cobrança %s com pagamento revelado abre a pendência sem lançar erro e responde ao OS',
+      async (situacao) => {
+        const { servico, operacoes, cobrancas, marcarConfirmouPagamento } =
+          montar(situacao);
+
+        await servico.executar('op1');
+
+        const [, , gravada] = (cobrancas.atualizar as jest.Mock).mock.calls[0];
+        expect(gravada.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+        expect(gravada.pagamentoConfirmadoEm).toEqual(
+          new Date('2026-11-15T12:00:00.000Z'),
+        );
+        expect(marcarConfirmouPagamento).toHaveBeenCalledWith(
+          expect.anything(),
+          'omp1',
+        );
+        expect(operacoes.concluir).toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          expect.objectContaining({
+            resultado: 'PENDENCIA_MANUAL_ABERTA',
+            pendenciaId: 'pend1',
+          }),
+        );
+      },
+    );
+
+    it.each([
+      SituacaoCobranca.INTENCAO,
+      SituacaoCobranca.PENDENTE,
+      SituacaoCobranca.EXPIRADA,
+    ])(
+      'cobrança %s sem pagamento revelado abre a pendência, responde ao OS e não muda de situação',
+      async (situacao) => {
+        const {
+          servico,
+          operacoes,
+          cobrancas,
+          marcarConfirmouPagamento,
+          pendencias,
+        } = montar(situacao, { tipo: 'indeterminado', motivo: 'timeout' });
+
+        await servico.executar('op1');
+
+        expect(pendencias.criar).toHaveBeenCalledTimes(1);
+        expect(cobrancas.atualizar).not.toHaveBeenCalled();
+        expect(marcarConfirmouPagamento).not.toHaveBeenCalled();
+        expect(operacoes.concluir).toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          {
+            cobrancaId: 'c1',
+            resultado: 'PENDENCIA_MANUAL_ABERTA',
+            pendenciaId: 'pend1',
+          },
+        );
+      },
+    );
+
+    it('reprocesso reaproveita a pendência aberta em vez de abrir outra', async () => {
+      const { servico, operacoes, pendencias } = montar(
+        SituacaoCobranca.PENDENTE,
+        { tipo: 'indeterminado', motivo: 'timeout' },
+      );
+      (pendencias.buscarAbertaPorCobrancaId as jest.Mock).mockResolvedValue({
+        id: 'pend-existente',
+      });
+
+      await servico.executar('op1');
+
+      expect(pendencias.criar).not.toHaveBeenCalled();
+      expect(operacoes.concluir).toHaveBeenCalledWith(
+        expect.anything(),
+        'op1',
+        expect.objectContaining({ pendenciaId: 'pend-existente' }),
+      );
+    });
+
+    it.each([SituacaoCobranca.PENDENTE, SituacaoCobranca.EXPIRADA])(
+      'reprocesso que revela o pagamento (%s) reaproveita a pendência aberta e aplica a situação coerente',
+      async (situacao) => {
+        const {
+          servico,
+          operacoes,
+          cobrancas,
+          pendencias,
+          marcarConfirmouPagamento,
+        } = montar(situacao);
+        (pendencias.buscarAbertaPorCobrancaId as jest.Mock).mockResolvedValue({
+          id: 'pend-existente',
+        });
+
+        await servico.executar('op1');
+
+        expect(pendencias.criar).not.toHaveBeenCalled();
+        const [, , gravada] = (cobrancas.atualizar as jest.Mock).mock.calls[0];
+        expect(gravada.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+        expect(gravada.pagamentoConfirmadoEm).toEqual(
+          new Date('2026-11-15T12:00:00.000Z'),
+        );
+        expect(marcarConfirmouPagamento).toHaveBeenCalledWith(
+          expect.anything(),
+          'omp1',
+        );
+        expect(operacoes.concluir).toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          expect.objectContaining({ pendenciaId: 'pend-existente' }),
+        );
+      },
+    );
+
+    describe('order com estorno automático', () => {
+      it('estorno em andamento: o cancelamento espera, sem cancelar a order nem abrir pendência', async () => {
+        const buscarPorOrderMercadoPagoId = jest
+          .fn()
+          .mockResolvedValue({ situacao: 'EM_ANDAMENTO' });
+        const { servico, operacoes, pendencias } = montar(
+          SituacaoCobranca.EXPIRADA,
+          consultaPaga,
+          { buscarPorOrderMercadoPagoId },
+        );
+
+        await servico.executar('op1');
+
+        expect(buscarPorOrderMercadoPagoId).toHaveBeenCalledWith('omp1');
+        expect(operacoes.adiarProcessamento).toHaveBeenCalled();
+        expect(
+          operacoes.incrementarTentativasMercadoPago,
+        ).not.toHaveBeenCalled();
+        expect(operacoes.concluir).not.toHaveBeenCalled();
+        expect(pendencias.criar).not.toHaveBeenCalled();
+      });
+
+      it('estorno com pendência manual: responde com a pendência existente, sem abrir outra', async () => {
+        const { servico, operacoes, pendencias, cobrancas } = montar(
+          SituacaoCobranca.EXPIRADA,
+          consultaPaga,
+          {
+            buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue({
+              situacao: 'PENDENCIA_MANUAL',
+              pendenciaId: 'pend-do-estorno',
+            }),
+          },
+        );
+
+        await servico.executar('op1');
+
+        expect(operacoes.concluir).toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          {
+            cobrancaId: 'c1',
+            resultado: 'PENDENCIA_MANUAL_ABERTA',
+            pendenciaId: 'pend-do-estorno',
+          },
+        );
+        expect(pendencias.criar).not.toHaveBeenCalled();
+        expect(cobrancas.atualizar).not.toHaveBeenCalled();
+      });
+
+      it('nunca trata a order em estorno como pagamento revelado, mesmo se o registro aparecer depois do ciclo', async () => {
+        const buscarPorOrderMercadoPagoId = jest
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue({ situacao: 'EM_ANDAMENTO' });
+        const { servico, cobrancas, marcarConfirmouPagamento } = montar(
+          SituacaoCobranca.EXPIRADA,
+          consultaPaga,
+          { buscarPorOrderMercadoPagoId },
+        );
+
+        await servico.executar('op1');
+
+        expect(marcarConfirmouPagamento).not.toHaveBeenCalled();
+        const gravada = (cobrancas.atualizar as jest.Mock).mock.calls.at(
+          -1,
+        )?.[2];
+        expect(gravada?.situacao ?? SituacaoCobranca.EXPIRADA).toBe(
+          SituacaoCobranca.EXPIRADA,
+        );
+      });
+
+      it('estorno já concluído não espera nem responde pela pendência do estorno', async () => {
+        const { servico, operacoes } = montar(
+          SituacaoCobranca.EXPIRADA,
+          consultaPaga,
+          {
+            buscarPorOrderMercadoPagoId: jest.fn().mockResolvedValue({
+              situacao: 'CONCLUIDO',
+              pendenciaId: 'pend-do-estorno',
+            }),
+          },
+        );
+
+        await servico.executar('op1');
+
+        expect(operacoes.adiarProcessamento).not.toHaveBeenCalled();
+        expect(operacoes.concluir).not.toHaveBeenCalledWith(
+          expect.anything(),
+          'op1',
+          expect.objectContaining({ pendenciaId: 'pend-do-estorno' }),
+        );
+      });
+    });
+
+    it('sem order ativa abre a pendência sem consultar o Mercado Pago', async () => {
+      const cobranca = new Cobranca({
+        ...cobrancaPendente,
+        situacao: SituacaoCobranca.PENDENTE,
+      });
+      const consultarOrder = jest.fn();
+      const { servico, operacoes } = criarServico({
+        operacoes: {
+          buscarPorId: jest.fn().mockResolvedValue({
+            ...operacaoBase,
+            tentativasMercadoPago: 4,
+          }),
+        },
+        cobrancas: {
+          buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(cobranca),
+          buscarPorId: jest.fn().mockResolvedValue(cobranca),
+        },
+        orders: {
+          buscarAtivaPorCobrancaId: jest
+            .fn()
+            .mockResolvedValueOnce(orderAtiva)
+            .mockResolvedValue(null),
+          buscarQueConfirmouPagamento: jest.fn().mockResolvedValue(null),
+          marcarConfirmouPagamento: jest.fn(),
+          desativar: jest.fn(),
+        },
+        mp: {
+          cancelarOrder: jest
+            .fn()
+            .mockResolvedValue({ tipo: 'indeterminado', motivo: 'x' }),
+          consultarOrder,
+        },
+        pendencias: {
+          criar: jest.fn().mockResolvedValue({ id: 'pend1' }),
+          buscarAbertaPorCobrancaId: jest.fn().mockResolvedValue(null),
+        },
+      });
+
+      await servico.executar('op1');
+
+      expect(consultarOrder).not.toHaveBeenCalled();
+      expect(operacoes.concluir).toHaveBeenCalled();
     });
   });
 });

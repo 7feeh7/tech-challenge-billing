@@ -73,12 +73,22 @@ export class ExecutarConsultaSituacaoFinanceiroService {
     await this.responderComEfeito(operacao, cobranca);
   }
 
+  // Com pagamento confirmado, a order que vale é a legítima: a ativa pode ser a
+  // de um segundo pagamento (ou nem existir, depois que ele é desativado).
+  private buscarOrderDoPagamento(cobranca: Cobranca, confirmada: boolean) {
+    const cobrancaId = cobranca.id as string;
+    return confirmada
+      ? this.orders.buscarQueConfirmouPagamento(cobrancaId)
+      : this.orders.buscarAtivaPorCobrancaId(cobrancaId);
+  }
+
   private async responderLeitura(
     operacao: OperacaoFinanceiraRegistro,
     cobranca: Cobranca,
   ): Promise<void> {
-    const order = await this.orders.buscarAtivaPorCobrancaId(
-      cobranca.id as string,
+    const order = await this.buscarOrderDoPagamento(
+      cobranca,
+      cobranca.pagamentoConfirmado(),
     );
     if (!order) {
       const situacao = this.inferirSemOrder(cobranca);
@@ -122,14 +132,65 @@ export class ExecutarConsultaSituacaoFinanceiroService {
     );
   }
 
+  // Cobrança com pagamento confirmado que já não está `PAGA` (estorno em
+  // andamento, estornada ou em pendência manual): só a leitura da order
+  // legítima responde. Nada é cancelado, para não tocar numa order já
+  // estornada nem na legítima, nem na ativa, que pode ser de um segundo
+  // pagamento ainda não conciliado.
+  private async responderPelaOrderLegitima(
+    operacao: OperacaoFinanceiraRegistro,
+    cobranca: Cobranca,
+  ): Promise<void> {
+    const order = await this.orders.buscarQueConfirmouPagamento(
+      cobranca.id as string,
+    );
+    const aprovadoEm = cobranca.pagamentoConfirmadoEm;
+    if (!order || !aprovadoEm) {
+      await this.responder(
+        operacao,
+        'INDETERMINADA',
+        'INDETERMINADO',
+        cobranca,
+        null,
+        null,
+      );
+      return;
+    }
+
+    const consulta = await this.mercadoPago.consultarOrder(
+      order.mercadoPagoOrderId,
+    );
+    if (consulta.tipo === 'indeterminado') {
+      await this.registrarIndeterminada(operacao, cobranca, consulta.motivo);
+      return;
+    }
+
+    await this.responder(
+      operacao,
+      aprovadoEm.getTime() <= cobranca.prazoPagamento.getTime()
+        ? 'PAGO_NO_PRAZO'
+        : 'SEM_PAGAMENTO',
+      mapearSituacaoEstornoConsulta({
+        order: consulta.order,
+        situacaoCobranca: cobranca.situacao,
+      }),
+      cobranca,
+      order.mercadoPagoOrderId,
+      aprovadoEm,
+    );
+  }
+
   private async responderComEfeito(
     operacao: OperacaoFinanceiraRegistro,
     cobranca: Cobranca,
   ): Promise<void> {
+    if (cobranca.pagamentoConfirmado() && !cobranca.jaPaga()) {
+      await this.responderPelaOrderLegitima(operacao, cobranca);
+      return;
+    }
+
     if (cobranca.jaPaga() && cobranca.pagamentoConfirmadoEm) {
-      const order = await this.orders.buscarAtivaPorCobrancaId(
-        cobranca.id as string,
-      );
+      const order = await this.buscarOrderDoPagamento(cobranca, true);
       if (order) {
         const consulta = await this.mercadoPago.consultarOrder(
           order.mercadoPagoOrderId,
@@ -159,8 +220,9 @@ export class ExecutarConsultaSituacaoFinanceiroService {
       }
     }
 
-    const order = await this.orders.buscarAtivaPorCobrancaId(
-      cobranca.id as string,
+    const order = await this.buscarOrderDoPagamento(
+      cobranca,
+      cobranca.jaPaga(),
     );
     if (order) {
       const consulta = await this.mercadoPago.consultarOrder(

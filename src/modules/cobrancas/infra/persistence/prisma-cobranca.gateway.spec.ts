@@ -370,4 +370,56 @@ describe('PrismaCobrancaGateway', () => {
     const encontrada = await gateway.buscarPorMercadoPagoOrderId('ORD1');
     expect(encontrada).toBe(cobranca);
   });
+
+  describe('bloquearParaAtualizacao', () => {
+    const linhaCobranca = {
+      id: 'c1',
+      orcamentoId: 'o1',
+      ordemServicoId: 'os1',
+      rodada: 1,
+      clienteId: 'cl1',
+      correlationId: 'corr',
+      valorTotalCentavos: 1000,
+      prazoPagamento: new Date('2099-01-01T00:00:00.000Z'),
+      situacao: 'PAGA',
+      linkPagamento: null,
+      pagamentoConfirmadoEm: null,
+      bloqueadoConciliacaoAte: null,
+      criadoEm: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    it('lê a cobrança bloqueando a linha na transação', async () => {
+      const clienteTx = {
+        $queryRaw: jest.fn().mockResolvedValue([{ id: 'c1' }]),
+        cobranca: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue(linhaCobranca),
+        },
+      };
+      const gateway = new PrismaCobrancaGateway({} as never);
+
+      const cobranca = await gateway.bloquearParaAtualizacao(
+        new PrismaContextoTransacao(clienteTx as never),
+        'c1',
+      );
+
+      expect(cobranca?.id).toBe('c1');
+      expect(cobranca?.situacao).toBe(SituacaoCobranca.PAGA);
+    });
+
+    it('devolve null quando a cobrança não existe', async () => {
+      const clienteTx = {
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        cobranca: { findUniqueOrThrow: jest.fn() },
+      };
+      const gateway = new PrismaCobrancaGateway({} as never);
+
+      await expect(
+        gateway.bloquearParaAtualizacao(
+          new PrismaContextoTransacao(clienteTx as never),
+          'c1',
+        ),
+      ).resolves.toBeNull();
+      expect(clienteTx.cobranca.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+  });
 });

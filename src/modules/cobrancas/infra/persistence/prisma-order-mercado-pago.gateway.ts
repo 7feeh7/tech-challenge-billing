@@ -33,6 +33,39 @@ export class PrismaOrderMercadoPagoGateway implements OrderMercadoPagoGateway {
     return this.toRegistro(raw);
   }
 
+  async buscarPorMercadoPagoOrderId(
+    mercadoPagoOrderId: string,
+  ): Promise<OrderMercadoPagoRegistro | null> {
+    const raw = await this.prisma.orderMercadoPago.findUnique({
+      where: { mercadoPagoOrderId },
+    });
+    return raw ? this.toRegistro(raw) : null;
+  }
+
+  async buscarQueConfirmouPagamento(
+    cobrancaId: string,
+  ): Promise<OrderMercadoPagoRegistro | null> {
+    const confirmadora = await this.prisma.orderMercadoPago.findFirst({
+      where: { cobrancaId, confirmouPagamento: true },
+    });
+    if (confirmadora) return this.toRegistro(confirmadora);
+    return (
+      (await this.buscarAtivaPorCobrancaId(cobrancaId)) ??
+      (await this.buscarUltimaPorCobrancaId(cobrancaId))
+    );
+  }
+
+  async marcarConfirmouPagamento(
+    contexto: ContextoTransacao,
+    id: string,
+  ): Promise<void> {
+    const cliente = obterClienteTransacao(contexto, this.prisma);
+    await cliente.orderMercadoPago.update({
+      where: { id },
+      data: { confirmouPagamento: true },
+    });
+  }
+
   async criar(
     contexto: ContextoTransacao,
     registro: OrderMercadoPagoRegistro,
@@ -82,6 +115,7 @@ export class PrismaOrderMercadoPagoGateway implements OrderMercadoPagoGateway {
     statusOrder: string | null;
     statusDetail: string | null;
     ativa: boolean;
+    confirmouPagamento: boolean;
   }): OrderMercadoPagoRegistro {
     return {
       id: raw.id,
@@ -92,6 +126,7 @@ export class PrismaOrderMercadoPagoGateway implements OrderMercadoPagoGateway {
       statusOrder: raw.statusOrder,
       statusDetail: raw.statusDetail,
       ativa: raw.ativa,
+      confirmouPagamento: raw.confirmouPagamento,
     };
   }
 }

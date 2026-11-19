@@ -1,11 +1,13 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
+import type { EstornoAutomaticoGateway } from '@/modules/cobrancas/application/ports/estorno-automatico.gateway';
 import type { MercadoPagoGateway } from '@/modules/cobrancas/application/ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from '@/modules/cobrancas/application/ports/operacao-criacao-order.gateway';
 import type { OrderMercadoPagoGateway } from '@/modules/cobrancas/application/ports/order-mercado-pago.gateway';
 import {
   COBRANCA_GATEWAY,
+  ESTORNO_AUTOMATICO_GATEWAY,
   MERCADO_PAGO_GATEWAY,
   OPERACAO_CRIACAO_ORDER_GATEWAY,
   ORDER_MERCADO_PAGO_GATEWAY,
@@ -131,6 +133,7 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
         pendencias: PrismaPendenciaEstornoGateway,
         outbox: OutboxGateway,
         config: ConfigService,
+        estornosAutomaticos: EstornoAutomaticoGateway,
       ) =>
         new ExecutarCancelamentoFinanceiroService(
           uow,
@@ -154,6 +157,7 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
             config.get<string>('CANCELAMENTO_FINANCEIRO_RETRY_MP_MS') ??
               '30000',
           ),
+          estornosAutomaticos,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -166,6 +170,7 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
         PENDENCIA_ESTORNO_GATEWAY,
         OUTBOX_GATEWAY,
         ConfigService,
+        ESTORNO_AUTOMATICO_GATEWAY,
       ],
     },
     {
@@ -216,6 +221,7 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
         cobrancas: CobrancaGateway,
         orders: OrderMercadoPagoGateway,
         outbox: OutboxGateway,
+        estornosAutomaticos: EstornoAutomaticoGateway,
       ) =>
         new ResolverPendenciaEstornoUseCase(
           uow,
@@ -223,6 +229,7 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
           cobrancas,
           orders,
           outbox,
+          estornosAutomaticos,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -230,12 +237,14 @@ import { PrismaPendenciaEstornoGateway } from './infra/persistence/prisma-penden
         COBRANCA_GATEWAY,
         ORDER_MERCADO_PAGO_GATEWAY,
         OUTBOX_GATEWAY,
+        ESTORNO_AUTOMATICO_GATEWAY,
       ],
     },
     ProcessadorOperacoesFinanceirasService,
   ],
   exports: [
     BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
+    PENDENCIA_ESTORNO_GATEWAY,
     PROCESSADOR_CANCELAR_FINANCEIRO,
     PROCESSADOR_CONSULTAR_SITUACAO_FINANCEIRO,
     ProcessarCancelarFinanceiroUseCase,

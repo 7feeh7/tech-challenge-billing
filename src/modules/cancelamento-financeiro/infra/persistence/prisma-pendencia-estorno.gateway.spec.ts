@@ -70,4 +70,33 @@ describe('PrismaPendenciaEstornoGateway', () => {
     });
     expect(reg.situacao).toBe('RESOLVIDA');
   });
+
+  describe('buscarAbertaPorCobrancaId', () => {
+    it('devolve a pendência aberta mais antiga da cobrança', async () => {
+      const findFirst = jest.fn().mockResolvedValue(raw);
+      const gateway = new PrismaPendenciaEstornoGateway({
+        pendenciaEstorno: { findFirst },
+      } as never);
+
+      await expect(
+        gateway.buscarAbertaPorCobrancaId('c1'),
+      ).resolves.toMatchObject({ id: 'p1' });
+      expect(findFirst).toHaveBeenCalledWith({
+        where: {
+          cobrancaId: 'c1',
+          situacao: 'ABERTA',
+          estornosAutomaticos: { none: {} },
+        },
+        orderBy: { criadoEm: 'asc' },
+      });
+    });
+
+    it('devolve null quando não há pendência aberta', async () => {
+      const gateway = new PrismaPendenciaEstornoGateway({
+        pendenciaEstorno: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as never);
+
+      await expect(gateway.buscarAbertaPorCobrancaId('c1')).resolves.toBeNull();
+    });
+  });
 });

@@ -1,15 +1,21 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { BloqueioCriacaoCobrancaGateway } from '@/modules/cancelamento-financeiro/application/ports/bloqueio-criacao-cobranca.gateway';
-import { BLOQUEIO_CRIACAO_COBRANCA_GATEWAY } from '@/modules/cancelamento-financeiro/application/ports/tokens';
+import type { PendenciaEstornoGateway } from '@/modules/cancelamento-financeiro/application/ports/pendencia-estorno.gateway';
+import {
+  BLOQUEIO_CRIACAO_COBRANCA_GATEWAY,
+  PENDENCIA_ESTORNO_GATEWAY,
+} from '@/modules/cancelamento-financeiro/application/ports/tokens';
 import { CancelamentoFinanceiroModule } from '@/modules/cancelamento-financeiro/cancelamento-financeiro.module';
 import type { UnitOfWork } from '@/shared/database/unit-of-work.port';
 import { UNIT_OF_WORK } from '@/shared/database/unit-of-work.port';
 import type { OutboxGateway } from '@/shared/messaging/application/ports/outbox.gateway';
 import { OUTBOX_GATEWAY } from '@/shared/messaging/application/ports/tokens';
 import { MensageriaModule } from '@/shared/messaging/mensageria.module';
+import { calcularTempoOperacaoFinanceiraMesmaReivindicacaoMs } from './application/calcular-posse-cobranca';
 import type { AvisoWebhookGateway } from './application/ports/aviso-webhook.gateway';
 import type { CobrancaGateway } from './application/ports/cobranca.gateway';
+import type { EstornoAutomaticoGateway } from './application/ports/estorno-automatico.gateway';
 import type { MercadoPagoGateway } from './application/ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from './application/ports/operacao-criacao-order.gateway';
 import type { OrderMercadoPagoGateway } from './application/ports/order-mercado-pago.gateway';
@@ -17,6 +23,7 @@ import type { TentativaRecusaGateway } from './application/ports/tentativa-recus
 import {
   AVISO_WEBHOOK_GATEWAY,
   COBRANCA_GATEWAY,
+  ESTORNO_AUTOMATICO_GATEWAY,
   MERCADO_PAGO_GATEWAY,
   OPERACAO_CRIACAO_ORDER_GATEWAY,
   ORDER_MERCADO_PAGO_GATEWAY,
@@ -24,8 +31,10 @@ import {
 } from './application/ports/tokens';
 import { ConciliarCobrancaService } from './application/services/conciliar-cobranca.service';
 import { CriarOrderMercadoPagoService } from './application/services/criar-order-mercado-pago.service';
+import { ExecutarEstornoAutomaticoService } from './application/services/executar-estorno-automatico.service';
 import { ExpirarCobrancaService } from './application/services/expirar-cobranca.service';
 import { ReemitirOrderMercadoPagoService } from './application/services/reemitir-order-mercado-pago.service';
+import { RegistrarSegundoPagamentoService } from './application/services/registrar-segundo-pagamento.service';
 import { TratarPagamentoTardioService } from './application/services/tratar-pagamento-tardio.service';
 import { ListarCobrancasUseCase } from './application/use-cases/listar-cobrancas.use-case';
 import { ProcessarNotificacaoMercadoPagoUseCase } from './application/use-cases/processar-notificacao-mercado-pago.use-case';
@@ -36,6 +45,7 @@ import { ProcessadorConciliacaoCobrancasService } from './infra/jobs/processador
 import { ProcessadorExpiracaoCobrancasService } from './infra/jobs/processador-expiracao-cobrancas.service';
 import { PrismaAvisoWebhookGateway } from './infra/persistence/prisma-aviso-webhook.gateway';
 import { PrismaCobrancaGateway } from './infra/persistence/prisma-cobranca.gateway';
+import { PrismaEstornoAutomaticoGateway } from './infra/persistence/prisma-estorno-automatico.gateway';
 import { PrismaOperacaoCriacaoOrderGateway } from './infra/persistence/prisma-operacao-criacao-order.gateway';
 import { PrismaOrderMercadoPagoGateway } from './infra/persistence/prisma-order-mercado-pago.gateway';
 import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentativa-recusa.gateway';
@@ -49,8 +59,13 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
     PrismaOperacaoCriacaoOrderGateway,
     PrismaAvisoWebhookGateway,
     PrismaTentativaRecusaGateway,
+    PrismaEstornoAutomaticoGateway,
     FetchMercadoPagoGateway,
     { provide: COBRANCA_GATEWAY, useExisting: PrismaCobrancaGateway },
+    {
+      provide: ESTORNO_AUTOMATICO_GATEWAY,
+      useExisting: PrismaEstornoAutomaticoGateway,
+    },
     {
       provide: ORDER_MERCADO_PAGO_GATEWAY,
       useExisting: PrismaOrderMercadoPagoGateway,
@@ -134,20 +149,94 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
       ],
     },
     {
+      provide: ExecutarEstornoAutomaticoService,
+      useFactory: (
+        uow: UnitOfWork,
+        estornos: EstornoAutomaticoGateway,
+        cobrancas: CobrancaGateway,
+        orders: OrderMercadoPagoGateway,
+        pendencias: PendenciaEstornoGateway,
+        mp: MercadoPagoGateway,
+        outbox: OutboxGateway,
+        config: ConfigService,
+      ) => {
+        const atrasoRetryMs = Number(
+          config.get<string>('CANCELAMENTO_FINANCEIRO_RETRY_MP_MS') ?? '30000',
+        );
+        return new ExecutarEstornoAutomaticoService(
+          uow,
+          estornos,
+          cobrancas,
+          orders,
+          pendencias,
+          mp,
+          outbox,
+          {
+            maxTentativas: Number(
+              config.get<string>('CANCELAMENTO_FINANCEIRO_MAX_TENTATIVAS_MP') ??
+                '5',
+            ),
+            atrasoRetryMs,
+            posseMs: calcularTempoOperacaoFinanceiraMesmaReivindicacaoMs({
+              mpRequestTimeoutMs: Number(
+                config.get<string>('MP_REQUEST_TIMEOUT_MS') ?? '30000',
+              ),
+              mpRetryBackoffMs: atrasoRetryMs,
+            }),
+          },
+        );
+      },
+      inject: [
+        UNIT_OF_WORK,
+        ESTORNO_AUTOMATICO_GATEWAY,
+        COBRANCA_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        PENDENCIA_ESTORNO_GATEWAY,
+        MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+        ConfigService,
+      ],
+    },
+    {
+      provide: RegistrarSegundoPagamentoService,
+      useFactory: (
+        estornos: EstornoAutomaticoGateway,
+        orders: OrderMercadoPagoGateway,
+        outbox: OutboxGateway,
+        executarEstorno: ExecutarEstornoAutomaticoService,
+      ) =>
+        new RegistrarSegundoPagamentoService(
+          estornos,
+          orders,
+          outbox,
+          executarEstorno,
+        ),
+      inject: [
+        ESTORNO_AUTOMATICO_GATEWAY,
+        ORDER_MERCADO_PAGO_GATEWAY,
+        OUTBOX_GATEWAY,
+        ExecutarEstornoAutomaticoService,
+      ],
+    },
+    {
       provide: TratarPagamentoTardioService,
       useFactory: (
         uow: UnitOfWork,
         cobrancas: CobrancaGateway,
-        orders: OrderMercadoPagoGateway,
-        mp: MercadoPagoGateway,
-        outbox: OutboxGateway,
-      ) => new TratarPagamentoTardioService(uow, cobrancas, orders, mp, outbox),
+        estornos: EstornoAutomaticoGateway,
+        executarEstorno: ExecutarEstornoAutomaticoService,
+      ) =>
+        new TratarPagamentoTardioService(
+          uow,
+          cobrancas,
+          estornos,
+          executarEstorno,
+        ),
       inject: [
         UNIT_OF_WORK,
         COBRANCA_GATEWAY,
-        ORDER_MERCADO_PAGO_GATEWAY,
-        MERCADO_PAGO_GATEWAY,
-        OUTBOX_GATEWAY,
+        ESTORNO_AUTOMATICO_GATEWAY,
+        ExecutarEstornoAutomaticoService,
       ],
     },
     {
@@ -159,6 +248,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         mp: MercadoPagoGateway,
         outbox: OutboxGateway,
         pagamentoTardio: TratarPagamentoTardioService,
+        conciliar: ConciliarCobrancaService,
       ) =>
         new ExpirarCobrancaService(
           uow,
@@ -167,6 +257,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
           mp,
           outbox,
           pagamentoTardio,
+          conciliar,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -175,6 +266,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         MERCADO_PAGO_GATEWAY,
         OUTBOX_GATEWAY,
         TratarPagamentoTardioService,
+        ConciliarCobrancaService,
       ],
     },
     {
@@ -188,6 +280,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         outbox: OutboxGateway,
         reemitir: ReemitirOrderMercadoPagoService,
         pagamentoTardio: TratarPagamentoTardioService,
+        segundoPagamento: RegistrarSegundoPagamentoService,
       ) =>
         new ConciliarCobrancaService(
           uow,
@@ -198,6 +291,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
           outbox,
           reemitir,
           pagamentoTardio,
+          segundoPagamento,
         ),
       inject: [
         UNIT_OF_WORK,
@@ -208,6 +302,7 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
         OUTBOX_GATEWAY,
         ReemitirOrderMercadoPagoService,
         TratarPagamentoTardioService,
+        RegistrarSegundoPagamentoService,
       ],
     },
     {
@@ -245,6 +340,8 @@ import { PrismaTentativaRecusaGateway } from './infra/persistence/prisma-tentati
     COBRANCA_GATEWAY,
     ORDER_MERCADO_PAGO_GATEWAY,
     OPERACAO_CRIACAO_ORDER_GATEWAY,
+    ESTORNO_AUTOMATICO_GATEWAY,
+    ExecutarEstornoAutomaticoService,
     ProcessarNotificacaoMercadoPagoUseCase,
     ConciliarCobrancaService,
     MERCADO_PAGO_GATEWAY,

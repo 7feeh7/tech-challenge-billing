@@ -59,3 +59,33 @@ Exemplos em `exemplos/`.
 | `billing.consultar-situacao-financeira.v1` | OS     |
 
 Exemplos em `exemplos/` (dois exemplos de `billing.situacao-financeira.v1`: sucesso e indeterminada).
+
+---
+
+## Estorno de segundo pagamento e de pagamento tardio
+
+Detalhes do fluxo, da idempotência e das situações da cobrança em [`../estorno-automatico.md`](../estorno-automatico.md).
+
+### `billing.estorno-concluido.v1`: campo aditivo `origemEstorno`
+
+Campo aditivo em `v1` (D3.12), preenchido em toda publicação:
+
+| `origemEstorno`       | Quando                                                                                                                                                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SEGUNDO_PAGAMENTO`   | Estorno automático de uma order paga que não é a que confirmou o pagamento. `orderId` é o da **segunda** order, `tipoEstorno` é sempre `INTEGRAL` e só sai depois de a consulta da order confirmar o estorno integral. |
+| `PENDENCIA_RESOLVIDA` | Decisão do ADMINISTRADOR numa pendência manual de estorno (`ESTORNO_INTEGRAL` ou `ESTORNO_PARCIAL`). `orderId` é o da order da pendência.                                                                              |
+
+Exemplos: `billing.estorno-concluido.v1.json` (`SEGUNDO_PAGAMENTO`), `billing.estorno-concluido.pendencia-resolvida.v1.json` (`PENDENCIA_RESOLVIDA`) e `billing.estorno-concluido.sem-origem.v1.json`, o formato anterior ao campo, mantido como compatibilidade: consumidores aceitam a mensagem sem `origemEstorno` e mantêm o comportamento que já tinham.
+
+### `billing.pagamento-confirmado.v1` da segunda order
+
+O Billing publica `PagamentoConfirmado` com o `orderId` da segunda order, na mesma transação do registro do segundo pagamento, para o OS abrir a pendência `SEGUNDO_PAGAMENTO`. A cobrança legítima segue `PAGA`.
+
+### `billing.pagamento-tardio-registrado.v1`: `tratamento`
+
+| `tratamento`         | Quando                                                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ESTORNO_AUTOMATICO` | Só depois de a consulta da order confirmar o estorno **integral**. Estorno parcial ou indeterminado não publica este valor. |
+| `PENDENCIA_MANUAL`   | Esgotadas as tentativas de estorno: pendência manual de estorno aberta, sem estorno concluído.                              |
+
+Exemplos: `billing.pagamento-tardio-registrado.v1.json` (`ESTORNO_AUTOMATICO`) e `billing.pagamento-tardio-registrado.pendencia-manual.v1.json` (`PENDENCIA_MANUAL`).

@@ -30,6 +30,19 @@ export class PrismaCobrancaGateway implements CobrancaGateway {
     return raw ? PrismaCobrancaMapper.toDomain(raw) : null;
   }
 
+  async bloquearParaAtualizacao(
+    contexto: ContextoTransacao,
+    id: string,
+  ): Promise<Cobranca | null> {
+    const cliente = obterClienteTransacao(contexto, this.prisma);
+    const bloqueadas = await cliente.$queryRaw<{ id: string }[]>`
+      SELECT id FROM cobrancas WHERE id = ${id}::uuid FOR UPDATE`;
+    if (bloqueadas.length === 0) return null;
+
+    const raw = await cliente.cobranca.findUniqueOrThrow({ where: { id } });
+    return PrismaCobrancaMapper.toDomain(raw);
+  }
+
   async buscarPorOrcamentoId(orcamentoId: string): Promise<Cobranca | null> {
     const raw = await this.prisma.cobranca.findUnique({
       where: { orcamentoId },

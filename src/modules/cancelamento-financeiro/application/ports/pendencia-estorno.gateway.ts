@@ -36,6 +36,9 @@ export interface PendenciaEstornoGateway {
     input: CriarPendenciaEstornoInput,
   ): Promise<PendenciaEstornoRegistro>;
   buscarPorId(id: string): Promise<PendenciaEstornoRegistro | null>;
+  buscarAbertaPorCobrancaId(
+    cobrancaId: string,
+  ): Promise<PendenciaEstornoRegistro | null>;
   listarAbertas(
     page: number,
     limit: number,

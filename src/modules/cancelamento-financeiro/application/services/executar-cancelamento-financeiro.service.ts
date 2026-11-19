@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import type { CobrancaGateway } from '@/modules/cobrancas/application/ports/cobranca.gateway';
+import type { EstornoAutomaticoGateway } from '@/modules/cobrancas/application/ports/estorno-automatico.gateway';
 import type { MercadoPagoGateway } from '@/modules/cobrancas/application/ports/mercado-pago.gateway';
 import type { OperacaoCriacaoOrderGateway } from '@/modules/cobrancas/application/ports/operacao-criacao-order.gateway';
-import type { OrderMercadoPagoGateway } from '@/modules/cobrancas/application/ports/order-mercado-pago.gateway';
+import type {
+  OrderMercadoPagoGateway,
+  OrderMercadoPagoRegistro,
+} from '@/modules/cobrancas/application/ports/order-mercado-pago.gateway';
 import { Cobranca } from '@/modules/cobrancas/domain/entities/cobranca.entity';
 import { interpretarEstornoOrder } from '@/modules/cobrancas/domain/interpretar-estorno-order';
 import { interpretarSituacaoFinanceira } from '@/modules/cobrancas/domain/interpretar-situacao-order';
@@ -60,6 +64,7 @@ export class ExecutarCancelamentoFinanceiroService {
     private readonly atrasoAguardarMs: number,
     private readonly maxTentativasMercadoPago: number,
     private readonly atrasoRetryMercadoPagoMs: number,
+    private readonly estornosAutomaticos: EstornoAutomaticoGateway,
   ) {}
 
   async executar(operacaoId: string): Promise<void> {
@@ -102,14 +107,23 @@ export class ExecutarCancelamentoFinanceiroService {
     }
 
     if (this.semPagamento(cobranca)) {
+      if (await this.tratarOrderEmEstornoAutomatico(operacao, cobranca)) return;
       const ok = await this.cancelarCobrancaNaoPaga(operacao, cobranca);
       if (!ok) return;
       await this.concluirOperacao(operacao, cobranca.id, 'CANCELADA', null);
       return;
     }
 
-    if (cobranca.situacao === SituacaoCobranca.PAGA) {
-      if (operacao.resultadoExecucao === 'REPARO_INICIADO') {
+    // ESTORNO_EM_ANDAMENTO é o estorno de um ciclo anterior cujo resultado ficou
+    // indeterminado: cada ciclo o retoma até concluir ou abrir a pendência.
+    if (
+      cobranca.situacao === SituacaoCobranca.PAGA ||
+      cobranca.situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO
+    ) {
+      if (
+        cobranca.situacao === SituacaoCobranca.PAGA &&
+        operacao.resultadoExecucao === 'REPARO_INICIADO'
+      ) {
         await this.abrirPendencia(operacao, cobranca, 'reparo_iniciado');
         return;
       }
@@ -163,6 +177,41 @@ export class ExecutarCancelamentoFinanceiroService {
       cobranca.situacao === SituacaoCobranca.PENDENTE ||
       cobranca.situacao === SituacaoCobranca.EXPIRADA
     );
+  }
+
+  // A order paga de um estorno automático (pagamento tardio) já tem dono: o
+  // cancelamento espera o desfecho dele em vez de tratá-la como pagamento
+  // legítimo, o que abriria outra pendência ou um segundo estorno.
+  private async tratarOrderEmEstornoAutomatico(
+    operacao: OperacaoFinanceiraRegistro,
+    cobranca: Cobranca,
+  ): Promise<boolean> {
+    const order = await this.orders.buscarAtivaPorCobrancaId(
+      cobranca.id as string,
+    );
+    if (!order?.id) return false;
+    const estorno = await this.estornosAutomaticos.buscarPorOrderMercadoPagoId(
+      order.id,
+    );
+    if (!estorno) return false;
+
+    if (estorno.situacao === 'EM_ANDAMENTO') {
+      await this.operacoes.adiarProcessamento(
+        operacao.id,
+        new Date(Date.now() + this.atrasoAguardarMs),
+      );
+      return true;
+    }
+    if (estorno.situacao === 'PENDENCIA_MANUAL') {
+      await this.concluirOperacao(
+        operacao,
+        cobranca.id as string,
+        'PENDENCIA_MANUAL_ABERTA',
+        estorno.pendenciaId,
+      );
+      return true;
+    }
+    return false;
   }
 
   private async cancelarCobrancaNaoPaga(
@@ -254,7 +303,8 @@ export class ExecutarCancelamentoFinanceiroService {
     operacao: OperacaoFinanceiraRegistro,
     cobranca: Cobranca,
   ): Promise<boolean> {
-    const order = await this.orders.buscarAtivaPorCobrancaId(
+    // A order que confirmou o pagamento, nunca a de um segundo pagamento.
+    const order = await this.orders.buscarQueConfirmouPagamento(
       cobranca.id as string,
     );
     if (!order) {
@@ -263,6 +313,14 @@ export class ExecutarCancelamentoFinanceiroService {
         copia.marcarEstornada();
         await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
       });
+      return true;
+    }
+
+    if (
+      cobranca.situacao === SituacaoCobranca.ESTORNO_EM_ANDAMENTO &&
+      (await this.confirmarEstornoPorGet(order.mercadoPagoOrderId))
+    ) {
+      await this.registrarEstornada(cobranca, order);
       return true;
     }
 
@@ -313,6 +371,14 @@ export class ExecutarCancelamentoFinanceiroService {
       }
     }
 
+    await this.registrarEstornada(cobranca, order);
+    return true;
+  }
+
+  private async registrarEstornada(
+    cobranca: Cobranca,
+    order: OrderMercadoPagoRegistro,
+  ): Promise<void> {
     await this.unitOfWork.executar(async (ctx) => {
       const atual = await this.cobrancas.buscarPorId(cobranca.id as string);
       if (!atual?.id) return;
@@ -323,7 +389,6 @@ export class ExecutarCancelamentoFinanceiroService {
         await this.orders.desativar(ctx, order.id);
       }
     });
-    return true;
   }
 
   private async confirmarEstornoPorGet(orderId: string): Promise<boolean> {
@@ -340,19 +405,41 @@ export class ExecutarCancelamentoFinanceiroService {
     cobranca: Cobranca,
     motivo: 'reparo_iniciado' | 'operacao_indeterminada',
   ): Promise<void> {
+    const pagamentoRevelado = await this.consultarPagamentoRevelado(cobranca);
+    const pagamentoConfirmado =
+      cobranca.pagamentoConfirmado() || pagamentoRevelado !== null;
     const pendenciaId = await this.unitOfWork.executar(async (ctx) => {
-      const pendencia = await this.pendencias.criar(ctx, {
-        cobrancaId: cobranca.id as string,
-        ordemServicoId: cobranca.ordemServicoId,
-        rodada: cobranca.rodada,
-        valorCobrancaCentavos: cobranca.valorTotalCentavos,
-        motivoAbertura:
-          operacao.motivoCancelamento ??
-          'Cancelamento financeiro com reparo já iniciado.',
-      });
+      // Sem pagamento confirmado a cobrança não muda de situação: marcá-la como
+      // paga esconderia um pagamento posterior (nenhum PagamentoConfirmado) e
+      // faria o resolver estornar dinheiro que nunca entrou. A pendência
+      // aberta é sempre reaproveitada: se a conclusão falhar e o reprocesso
+      // revelar o pagamento, a cobrança ganha a situação coerente sem outra
+      // pendência.
+      const existente = await this.pendencias.buscarAbertaPorCobrancaId(
+        cobranca.id as string,
+      );
+      const pendencia =
+        existente ??
+        (await this.pendencias.criar(ctx, {
+          cobrancaId: cobranca.id as string,
+          ordemServicoId: cobranca.ordemServicoId,
+          rodada: cobranca.rodada,
+          valorCobrancaCentavos: cobranca.valorTotalCentavos,
+          motivoAbertura:
+            operacao.motivoCancelamento ??
+            'Cancelamento financeiro com reparo já iniciado.',
+        }));
+      if (!pagamentoConfirmado) return pendencia.id;
+
       const copia = this.clonar(cobranca);
-      copia.marcarPendenciaManual();
+      copia.marcarPendenciaManual(pagamentoRevelado?.aprovadoEm);
       await this.cobrancas.atualizar(ctx, cobranca.id as string, copia);
+      if (pagamentoRevelado?.order.id) {
+        await this.orders.marcarConfirmouPagamento(
+          ctx,
+          pagamentoRevelado.order.id,
+        );
+      }
       return pendencia.id;
     });
 
@@ -375,6 +462,33 @@ export class ExecutarCancelamentoFinanceiroService {
       'PENDENCIA_MANUAL_ABERTA',
       pendenciaId,
     );
+  }
+
+  // Cobrança ainda sem pagamento confirmado (PENDENTE ou EXPIRADA) com order
+  // ativa: o pagamento revelado pela consulta torna a pendência coerente com a
+  // cobrança e identifica a order paga como a legítima.
+  private async consultarPagamentoRevelado(
+    cobranca: Cobranca,
+  ): Promise<{ order: OrderMercadoPagoRegistro; aprovadoEm: Date } | null> {
+    if (cobranca.pagamentoConfirmado()) return null;
+    const order = await this.orders.buscarAtivaPorCobrancaId(
+      cobranca.id as string,
+    );
+    if (!order) return null;
+    if (
+      order.id &&
+      (await this.estornosAutomaticos.buscarPorOrderMercadoPagoId(order.id))
+    ) {
+      return null;
+    }
+
+    const consulta = await this.mercadoPago.consultarOrder(
+      order.mercadoPagoOrderId,
+    );
+    if (consulta.tipo !== 'sucesso') return null;
+    const situacao = interpretarSituacaoFinanceira(consulta.order);
+    if (situacao.tipo !== 'paga') return null;
+    return { order, aprovadoEm: situacao.aprovadoEm };
   }
 
   private async tratarFalhaMercadoPago(

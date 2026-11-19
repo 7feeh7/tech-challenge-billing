@@ -36,6 +36,22 @@ export class PrismaPendenciaEstornoGateway implements PendenciaEstornoGateway {
     return raw ? this.map(raw) : null;
   }
 
+  async buscarAbertaPorCobrancaId(
+    cobrancaId: string,
+  ): Promise<PendenciaEstornoRegistro | null> {
+    const raw = await this.prisma.pendenciaEstorno.findFirst({
+      // Pendências de estorno automático pertencem a outra order, não ao
+      // cancelamento financeiro da cobrança.
+      where: {
+        cobrancaId,
+        situacao: 'ABERTA',
+        estornosAutomaticos: { none: {} },
+      },
+      orderBy: { criadoEm: 'asc' },
+    });
+    return raw ? this.map(raw) : null;
+  }
+
   async listarAbertas(
     page: number,
     limit: number,

@@ -16,6 +16,7 @@ import { SituacaoCobranca } from '../../domain/situacao-cobranca';
 import type { CobrancaGateway } from '../ports/cobranca.gateway';
 import type { MercadoPagoGateway } from '../ports/mercado-pago.gateway';
 import type { OrderMercadoPagoGateway } from '../ports/order-mercado-pago.gateway';
+import type { ConciliarCobrancaService } from './conciliar-cobranca.service';
 import { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
 
 export class ExpirarCobrancaService {
@@ -26,6 +27,7 @@ export class ExpirarCobrancaService {
     private readonly mercadoPago: MercadoPagoGateway,
     private readonly outbox: OutboxGateway,
     private readonly pagamentoTardio: TratarPagamentoTardioService,
+    private readonly conciliar: ConciliarCobrancaService,
   ) {}
 
   async expirarPorCobrancaId(cobrancaId: string): Promise<void> {
@@ -59,13 +61,22 @@ export class ExpirarCobrancaService {
 
     const interpretacao = interpretarSituacaoFinanceira(consulta.order);
     if (interpretacao.tipo === 'paga') {
+      // Pago dentro do prazo, com o webhook atrasado: é pagamento normal, e
+      // estornar a cobrança legítima seria indevido (D4.7).
+      if (
+        !this.pagamentoTardio.deveTratarPagamentoTardio(
+          cobranca,
+          interpretacao.aprovadoEm,
+        )
+      ) {
+        await this.conciliar.conciliarPorCobrancaId(cobrancaId, order);
+        return;
+      }
       await this.pagamentoTardio.tratar({
         cobrancaId,
         posseAte,
         orderId: order.id as string,
-        mercadoPagoOrderId: order.mercadoPagoOrderId,
         aprovadoEm: interpretacao.aprovadoEm,
-        orderConsultada: consulta.order,
       });
       return;
     }

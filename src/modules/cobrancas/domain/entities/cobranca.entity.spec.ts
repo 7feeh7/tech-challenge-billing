@@ -157,4 +157,80 @@ describe('Cobranca', () => {
     expect(pendente.linkPagamento).toBeNull();
     pendente.marcarExpirada();
   });
+
+  describe('pagamentoConfirmado', () => {
+    it.each([
+      SituacaoCobranca.PAGA,
+      SituacaoCobranca.ESTORNO_EM_ANDAMENTO,
+      SituacaoCobranca.ESTORNADA,
+      SituacaoCobranca.PENDENCIA_MANUAL,
+    ])('é verdadeiro em %s', (situacao) => {
+      expect(new Cobranca({ ...base, situacao }).pagamentoConfirmado()).toBe(
+        true,
+      );
+    });
+
+    it.each([
+      SituacaoCobranca.INTENCAO,
+      SituacaoCobranca.PENDENTE,
+      SituacaoCobranca.EXPIRADA,
+      SituacaoCobranca.CANCELADA,
+    ])('é falso em %s', (situacao) => {
+      expect(new Cobranca({ ...base, situacao }).pagamentoConfirmado()).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('marcarPendenciaManual', () => {
+    it('aceita estorno em andamento com resultado indeterminado', () => {
+      const cobranca = new Cobranca({
+        ...base,
+        situacao: SituacaoCobranca.ESTORNO_EM_ANDAMENTO,
+        pagamentoConfirmadoEm: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      cobranca.marcarPendenciaManual();
+
+      expect(cobranca.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+    });
+
+    it.each([SituacaoCobranca.PENDENTE, SituacaoCobranca.EXPIRADA])(
+      'aceita cobrança %s com pagamento revelado e o registra',
+      (situacao) => {
+        const cobranca = new Cobranca({ ...base, situacao });
+        const aprovadoEm = new Date('2026-11-15T12:00:00.000Z');
+
+        cobranca.marcarPendenciaManual(aprovadoEm);
+
+        expect(cobranca.situacao).toBe(SituacaoCobranca.PENDENCIA_MANUAL);
+        expect(cobranca.pagamentoConfirmadoEm).toEqual(aprovadoEm);
+      },
+    );
+
+    it('mantém a data de pagamento já registrada', () => {
+      const original = new Date('2026-11-15T12:00:00.000Z');
+      const cobranca = new Cobranca({
+        ...base,
+        situacao: SituacaoCobranca.PAGA,
+        pagamentoConfirmadoEm: original,
+      });
+
+      cobranca.marcarPendenciaManual(new Date('2026-12-01T00:00:00.000Z'));
+
+      expect(cobranca.pagamentoConfirmadoEm).toEqual(original);
+    });
+
+    it.each([
+      SituacaoCobranca.INTENCAO,
+      SituacaoCobranca.CANCELADA,
+      SituacaoCobranca.ESTORNADA,
+    ])('rejeita cobrança %s', (situacao) => {
+      const cobranca = new Cobranca({ ...base, situacao });
+
+      expect(() => cobranca.marcarPendenciaManual()).toThrow(
+        SituacaoCobrancaInvalidaError,
+      );
+    });
+  });
 });
