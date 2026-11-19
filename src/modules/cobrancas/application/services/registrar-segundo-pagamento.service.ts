@@ -99,6 +99,7 @@ export class RegistrarSegundoPagamentoService {
         orderId: order.mercadoPagoOrderId,
         aprovadoEm: aprovadoEm.toISOString(),
         valorCentavos: cobranca.valorTotalCentavos,
+        origemPagamento: 'SEGUNDO_PAGAMENTO',
       },
     };
     await this.outbox.registrar(ctx, {

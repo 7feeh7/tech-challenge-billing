@@ -61,11 +61,14 @@ export interface PayloadCobrancaCriada {
   valorCentavos: number;
 }
 
+export type OrigemPagamento = 'PAGAMENTO_LEGITIMO' | 'SEGUNDO_PAGAMENTO';
+
 export interface PayloadPagamentoConfirmado {
   cobrancaId: string;
   orderId: string;
   aprovadoEm: string;
   valorCentavos: number;
+  origemPagamento: OrigemPagamento;
 }
 
 export interface PayloadCancelarFinanceiro {

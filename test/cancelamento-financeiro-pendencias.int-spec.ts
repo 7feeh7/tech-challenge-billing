@@ -698,6 +698,10 @@ describe('Cancelamento financeiro: pendências do complemento (integração)', (
         where: { eventType: 'billing.pagamento-confirmado.v1' },
       });
       expect(confirmados).toHaveLength(1);
+      expect(
+        (confirmados[0].envelope as { payload: { origemPagamento: string } })
+          .payload.origemPagamento,
+      ).toBe('PAGAMENTO_LEGITIMO');
       expect(mp.chamadasEstorno).toHaveLength(0);
     });
 

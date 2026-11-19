@@ -60,6 +60,47 @@ describe('Exemplos JSON dos contratos do Billing', () => {
     });
   });
 
+  describe('billing.pagamento-confirmado.v1: campo aditivo origemPagamento', () => {
+    const ler = (arquivo: string) =>
+      JSON.parse(readFileSync(join(exemplosDir, arquivo), 'utf-8')) as {
+        payload: Record<string, unknown>;
+      };
+
+    it.each([
+      ['billing.pagamento-confirmado.v1.json', 'PAGAMENTO_LEGITIMO'],
+      [
+        'billing.pagamento-confirmado.segundo-pagamento.v1.json',
+        'SEGUNDO_PAGAMENTO',
+      ],
+    ])('%s traz origemPagamento %s', (arquivo, origem) => {
+      expect(ler(arquivo).payload.origemPagamento).toBe(origem);
+    });
+
+    it('mantém o exemplo anterior, sem o campo, como compatibilidade', () => {
+      const { payload } = ler(
+        'billing.pagamento-confirmado.sem-origem.v1.json',
+      );
+
+      expect(payload).not.toHaveProperty('origemPagamento');
+      expect(Object.keys(payload)).toEqual([
+        'cobrancaId',
+        'orderId',
+        'aprovadoEm',
+        'valorCentavos',
+      ]);
+    });
+
+    it('o exemplo com origem acrescenta só o campo aditivo ao anterior', () => {
+      const anterior = ler('billing.pagamento-confirmado.sem-origem.v1.json');
+      const atual = ler('billing.pagamento-confirmado.v1.json');
+
+      expect(atual.payload).toEqual({
+        ...anterior.payload,
+        origemPagamento: 'PAGAMENTO_LEGITIMO',
+      });
+    });
+  });
+
   describe('billing.pagamento-tardio-registrado.v1: tratamento', () => {
     it.each([
       ['billing.pagamento-tardio-registrado.v1.json', 'ESTORNO_AUTOMATICO'],

@@ -202,6 +202,7 @@ describe('Segundo pagamento (integração)', () => {
         cobrancaId,
         valorCentavos: 25000,
         aprovadoEm: '2026-11-15T12:00:00.000Z',
+        origemPagamento: 'SEGUNDO_PAGAMENTO',
       });
 
       const estornos = await outbox(EVENTO_ESTORNO_CONCLUIDO);
@@ -260,7 +261,11 @@ describe('Segundo pagamento (integração)', () => {
       await conciliar.conciliarPorMercadoPagoOrderId('ORD-B');
 
       expect((await estornoDe('ORD-B'))?.situacao).toBe('CONCLUIDO');
-      expect(await outbox(EVENTO_PAGAMENTO_CONFIRMADO)).toHaveLength(1);
+      const confirmados = await outbox(EVENTO_PAGAMENTO_CONFIRMADO);
+      expect(confirmados).toHaveLength(1);
+      expect(payloadDe(confirmados[0]).origemPagamento).toBe(
+        'SEGUNDO_PAGAMENTO',
+      );
       expect(await outbox(EVENTO_ESTORNO_CONCLUIDO)).toHaveLength(1);
       expect(mp.chamadasEstorno.map((c) => c.orderId)).toEqual(['ORD-B']);
       const cobranca = await prisma.cobranca.findUniqueOrThrow({
@@ -301,6 +306,16 @@ describe('Segundo pagamento (integração)', () => {
         'ORD-A',
         'ORD-B',
       ]);
+      const origemPorOrder = Object.fromEntries(
+        confirmados.map((m) => [
+          payloadDe(m).orderId,
+          payloadDe(m).origemPagamento,
+        ]),
+      );
+      expect(origemPorOrder).toEqual({
+        [legitima]: 'PAGAMENTO_LEGITIMO',
+        [segunda]: 'SEGUNDO_PAGAMENTO',
+      });
       expect(mp.chamadasEstorno.map((c) => c.orderId)).toEqual([segunda]);
       expect(await estornoDe(legitima)).toBeNull();
       expect((await estornoDe(segunda))?.situacao).toBe('CONCLUIDO');
@@ -329,11 +344,37 @@ describe('Segundo pagamento (integração)', () => {
       });
       expect(order.confirmouPagamento).toBe(true);
       expect(mp.chamadasEstorno).toHaveLength(0);
-      expect(
-        (await outbox(EVENTO_PAGAMENTO_CONFIRMADO)).map(
-          (m) => payloadDe(m).orderId,
-        ),
-      ).toEqual(['ORD-A']);
+      const confirmados = await outbox(EVENTO_PAGAMENTO_CONFIRMADO);
+      expect(confirmados.map((m) => payloadDe(m).orderId)).toEqual(['ORD-A']);
+      expect(payloadDe(confirmados[0]).origemPagamento).toBe(
+        'PAGAMENTO_LEGITIMO',
+      );
+    });
+
+    it('webhook repetido e conciliação concorrente da order legítima publicam um só PAGAMENTO_LEGITIMO', async () => {
+      const cobranca = await criarCobranca(SituacaoCobranca.PENDENTE);
+      await criarOrder(cobranca.cobrancaId, 'ORD-A', {
+        ativa: true,
+        confirmouPagamento: false,
+      });
+      mp.pagar('ORD-A', '2026-11-15T11:00:00.000Z');
+
+      await Promise.all([
+        notificacao.execute({ mercadoPagoOrderId: 'ORD-A', requestId: 'r1' }),
+        notificacao.execute({ mercadoPagoOrderId: 'ORD-A', requestId: 'r2' }),
+        conciliar.conciliarPorMercadoPagoOrderId('ORD-A'),
+        conciliar.conciliarPorCobrancaId(cobranca.cobrancaId),
+      ]);
+      await conciliar.conciliarPorMercadoPagoOrderId('ORD-A');
+
+      const confirmados = await outbox(EVENTO_PAGAMENTO_CONFIRMADO);
+      expect(confirmados).toHaveLength(1);
+      expect(payloadDe(confirmados[0])).toMatchObject({
+        orderId: 'ORD-A',
+        origemPagamento: 'PAGAMENTO_LEGITIMO',
+      });
+      expect(await prisma.estornoAutomatico.count()).toBe(0);
+      expect(mp.chamadasEstorno).toHaveLength(0);
     });
   });
 
