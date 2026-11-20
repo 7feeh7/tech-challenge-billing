@@ -1,0 +1,365 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/shared/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SituacaoOrcamento {
+  GERADO
+  APROVACAO_EM_ANDAMENTO
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+enum SituacaoCobranca {
+  INTENCAO
+  PENDENTE
+  PAGA
+  EXPIRADA
+  CANCELADA
+  ESTORNO_EM_ANDAMENTO
+  ESTORNADA
+  PENDENCIA_MANUAL
+}
+
+enum SituacaoOperacaoFinanceira {
+  EM_ANDAMENTO
+  CONCLUIDA
+}
+
+enum TipoOperacaoFinanceira {
+  CANCELAMENTO_FINANCEIRO
+  CONSULTA_SITUACAO_FINANCEIRA
+}
+
+enum FinalidadeConsultaSituacaoFinanceira {
+  PRAZO_DE_REFERENCIA_VENCIDO
+  EXCECAO_E10
+}
+
+enum ResultadoConsultaSituacaoFinanceira {
+  PAGO_NO_PRAZO
+  SEM_PAGAMENTO
+  INDETERMINADA
+}
+
+enum SituacaoEstornoConsulta {
+  NENHUM
+  EM_ANDAMENTO
+  REALIZADO
+  INDETERMINADO
+}
+
+enum TipoPendenciaFinanceiraMonitoramento {
+  SITUACAO_FINANCEIRA_INDETERMINADA
+}
+
+enum ResultadoExecucaoCancelamento {
+  REPARO_NAO_INICIADO
+  REPARO_INICIADO
+}
+
+enum ResultadoCancelamentoFinanceiro {
+  NADA_A_CANCELAR
+  CANCELADA
+  ESTORNADA
+  PENDENCIA_MANUAL_ABERTA
+}
+
+enum SituacaoPendenciaEstorno {
+  ABERTA
+  RESOLVIDA
+}
+
+enum DecisaoPendenciaEstorno {
+  ESTORNO_INTEGRAL
+  ESTORNO_PARCIAL
+  SEM_ESTORNO
+}
+
+enum SituacaoOperacaoCriacaoOrder {
+  EM_ANDAMENTO
+  CONCLUIDA
+}
+
+enum TipoItemOrcamento {
+  SERVICO
+  PECA
+}
+
+enum TipoEstornoAutomatico {
+  SEGUNDO_PAGAMENTO
+  PAGAMENTO_TARDIO
+}
+
+enum SituacaoEstornoAutomatico {
+  EM_ANDAMENTO
+  CONCLUIDO
+  PENDENCIA_MANUAL
+}
+
+model Orcamento {
+  id                 String            @id @default(uuid()) @db.Uuid
+  ordemServicoId     String            @map("ordem_servico_id") @db.Uuid
+  rodada             Int
+  clienteId          String            @map("cliente_id") @db.Uuid
+  correlationId      String            @map("correlation_id") @db.Uuid
+  valorTotalCentavos Int               @map("valor_total_centavos")
+  situacao           SituacaoOrcamento @default(GERADO)
+  motivoRejeicao     String?           @map("motivo_rejeicao")
+  tentativaAprovacao     Int               @default(0) @map("tentativa_aprovacao")
+  prazoReferencia        DateTime?         @map("prazo_referencia")
+  reservaId              String?           @map("reserva_id") @db.Uuid
+  aprovadoEm             DateTime?         @map("aprovado_em")
+  bloqueadoAprovacaoAte  DateTime?         @map("bloqueado_aprovacao_ate")
+  rejeitadoEm            DateTime?         @map("rejeitado_em")
+  criadoEm               DateTime          @default(now()) @map("criado_em")
+  atualizadoEm           DateTime          @updatedAt @map("atualizado_em")
+
+  itens    OrcamentoItem[]
+  cobranca Cobranca?
+
+  @@unique([ordemServicoId, rodada])
+  @@index([situacao, bloqueadoAprovacaoAte])
+  @@map("orcamentos")
+}
+
+model Cobranca {
+  id                      String           @id @default(uuid()) @db.Uuid
+  orcamentoId             String           @unique @map("orcamento_id") @db.Uuid
+  ordemServicoId          String           @map("ordem_servico_id") @db.Uuid
+  rodada                  Int
+  clienteId               String           @map("cliente_id") @db.Uuid
+  correlationId           String           @map("correlation_id") @db.Uuid
+  valorTotalCentavos      Int              @map("valor_total_centavos")
+  prazoPagamento          DateTime         @map("prazo_pagamento")
+  situacao                SituacaoCobranca @default(INTENCAO)
+  linkPagamento           String?          @map("link_pagamento")
+  pagamentoConfirmadoEm   DateTime?        @map("pagamento_confirmado_em")
+  bloqueadoConciliacaoAte DateTime?        @map("bloqueado_conciliacao_ate")
+  criadoEm                DateTime         @default(now()) @map("criado_em")
+  atualizadoEm            DateTime         @updatedAt @map("atualizado_em")
+
+  orcamento              Orcamento                 @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  ordersMercadoPago      OrderMercadoPago[]
+  operacaoCriacaoOrder   OperacaoCriacaoOrder?
+  tentativasRecusadas    TentativaPagamentoRecusada[]
+  avisosWebhook          AvisoWebhookMercadoPago[]
+  estornosAutomaticos    EstornoAutomatico[]
+
+  @@index([situacao, bloqueadoConciliacaoAte])
+  @@index([ordemServicoId])
+  @@map("cobrancas")
+}
+
+model OrderMercadoPago {
+  id                    String   @id @default(uuid()) @db.Uuid
+  cobrancaId            String   @map("cobranca_id") @db.Uuid
+  mercadoPagoOrderId    String   @unique @map("mercado_pago_order_id")
+  chaveIdempotencia     String   @unique @map("chave_idempotencia") @db.Uuid
+  checkoutUrl           String   @map("checkout_url")
+  statusOrder           String?  @map("status_order")
+  statusDetail          String?  @map("status_detail")
+  ativa                 Boolean  @default(true)
+  confirmouPagamento    Boolean  @default(false) @map("confirmou_pagamento")
+  criadoEm              DateTime @default(now()) @map("criado_em")
+  atualizadoEm          DateTime @updatedAt @map("atualizado_em")
+
+  cobranca           Cobranca                     @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  tentativasRecusadas TentativaPagamentoRecusada[]
+  estornoAutomatico  EstornoAutomatico?
+
+  @@index([cobrancaId, ativa])
+  @@map("orders_mercado_pago")
+}
+
+model OperacaoCriacaoOrder {
+  id                String                       @id @default(uuid()) @db.Uuid
+  cobrancaId        String                       @unique @map("cobranca_id") @db.Uuid
+  chaveIdempotencia String                       @unique @map("chave_idempotencia") @db.Uuid
+  situacao          SituacaoOperacaoCriacaoOrder @default(EM_ANDAMENTO)
+  criadoEm          DateTime                     @default(now()) @map("criado_em")
+  atualizadoEm      DateTime                     @updatedAt @map("atualizado_em")
+
+  cobranca Cobranca @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+
+  @@map("operacoes_criacao_order")
+}
+
+model AvisoWebhookMercadoPago {
+  id             String   @id @default(uuid()) @db.Uuid
+  cobrancaId     String?  @map("cobranca_id") @db.Uuid
+  mercadoPagoOrderId String @map("mercado_pago_order_id")
+  requestId      String?  @map("request_id")
+  notificacaoId  String?  @map("notificacao_id")
+  tipo           String?
+  acao           String?
+  recebidaEm     DateTime @default(now()) @map("recebida_em")
+
+  cobranca Cobranca? @relation(fields: [cobrancaId], references: [id], onDelete: SetNull)
+
+  @@index([mercadoPagoOrderId])
+  @@map("avisos_webhook_mercado_pago")
+}
+
+model TentativaPagamentoRecusada {
+  id                 String   @id @default(uuid()) @db.Uuid
+  cobrancaId         String   @map("cobranca_id") @db.Uuid
+  orderMercadoPagoId String   @map("order_mercado_pago_id") @db.Uuid
+  paymentIdMercadoPago String @map("payment_id_mercado_pago")
+  motivo             String
+  registradaEm       DateTime @default(now()) @map("registrada_em")
+
+  cobranca         Cobranca         @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  orderMercadoPago OrderMercadoPago @relation(fields: [orderMercadoPagoId], references: [id], onDelete: Cascade)
+
+  @@unique([cobrancaId, paymentIdMercadoPago])
+  @@map("tentativas_pagamento_recusadas")
+}
+
+model OrcamentoItem {
+  id                    String            @id @default(uuid()) @db.Uuid
+  orcamentoId           String            @map("orcamento_id") @db.Uuid
+  tipo                  TipoItemOrcamento
+  itemId                String            @map("item_id") @db.Uuid
+  nome                  String
+  quantidade            Int
+  precoUnitarioCentavos Int               @map("preco_unitario_centavos")
+
+  orcamento Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+
+  @@map("orcamento_itens")
+}
+
+model MensagemOutbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  eventType     String    @map("event_type")
+  envelope      Json
+  correlationId String    @map("correlation_id") @db.Uuid
+  destino       String
+  bloqueadoAte  DateTime? @map("bloqueado_ate")
+  enviadoEm     DateTime? @map("enviado_em")
+  tentativas    Int       @default(0)
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+
+  @@index([enviadoEm, bloqueadoAte])
+  @@map("mensagens_outbox")
+}
+
+model BloqueioCriacaoCobranca {
+  ordemServicoId String   @map("ordem_servico_id") @db.Uuid
+  rodada         Int
+  motivo         String?
+  criadoEm       DateTime @default(now()) @map("criado_em")
+
+  @@id([ordemServicoId, rodada])
+  @@map("bloqueios_criacao_cobranca")
+}
+
+model OperacaoFinanceira {
+  id                           String                         @id @default(uuid()) @db.Uuid
+  eventId                      String                         @unique @map("event_id") @db.Uuid
+  ordemServicoId               String                         @map("ordem_servico_id") @db.Uuid
+  rodada                       Int
+  correlationId                String                         @map("correlation_id") @db.Uuid
+  tipo                         TipoOperacaoFinanceira
+  situacao                     SituacaoOperacaoFinanceira     @default(EM_ANDAMENTO)
+  chaveIdempotenciaMercadoPago String                         @unique @map("chave_idempotencia_mercado_pago") @db.Uuid
+  resultadoExecucao            ResultadoExecucaoCancelamento?   @map("resultado_execucao")
+  consultaId                   String?                        @unique @map("consulta_id") @db.Uuid
+  finalidadeConsulta           FinalidadeConsultaSituacaoFinanceira? @map("finalidade_consulta")
+  resultadoConsulta            ResultadoConsultaSituacaoFinanceira? @map("resultado_consulta")
+  motivoCancelamento           String?                        @map("motivo_cancelamento")
+  etapaOrigem                  String?                        @map("etapa_origem")
+  cobrancaId                   String?                        @map("cobranca_id") @db.Uuid
+  resultado                    ResultadoCancelamentoFinanceiro?
+  pendenciaId                  String?                        @map("pendencia_id") @db.Uuid
+  bloqueadoProcessamentoAte    DateTime?                      @map("bloqueado_processamento_ate")
+  tentativasMercadoPago        Int                            @default(0) @map("tentativas_mercado_pago")
+  criadoEm                     DateTime                       @default(now()) @map("criado_em")
+  atualizadoEm                 DateTime                       @updatedAt @map("atualizado_em")
+
+  pendencia PendenciaEstorno? @relation(fields: [pendenciaId], references: [id], onDelete: SetNull)
+
+  @@index([situacao, bloqueadoProcessamentoAte])
+  @@index([ordemServicoId, rodada])
+  @@map("operacoes_financeiras")
+}
+
+model PendenciaEstorno {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  cobrancaId             String                  @map("cobranca_id") @db.Uuid
+  ordemServicoId         String                  @map("ordem_servico_id") @db.Uuid
+  rodada                 Int
+  valorCobrancaCentavos  Int                     @map("valor_cobranca_centavos")
+  situacao               SituacaoPendenciaEstorno @default(ABERTA)
+  motivoAbertura         String                  @map("motivo_abertura")
+  responsavelId          String?                 @map("responsavel_id") @db.Uuid
+  decisao                DecisaoPendenciaEstorno?
+  valorEstornadoCentavos Int?                    @map("valor_estornado_centavos")
+  justificativa          String?
+  resolvidaEm            DateTime?               @map("resolvida_em")
+  criadoEm               DateTime                @default(now()) @map("criado_em")
+  atualizadoEm           DateTime                @updatedAt @map("atualizado_em")
+
+  operacoes           OperacaoFinanceira[]
+  estornosAutomaticos EstornoAutomatico[]
+
+  @@index([situacao])
+  @@index([ordemServicoId])
+  @@map("pendencias_estorno")
+}
+
+model EstornoAutomatico {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  cobrancaId                String                    @map("cobranca_id") @db.Uuid
+  orderMercadoPagoId        String                    @unique @map("order_mercado_pago_id") @db.Uuid
+  tipo                      TipoEstornoAutomatico
+  situacao                  SituacaoEstornoAutomatico @default(EM_ANDAMENTO)
+  chaveIdempotencia         String                    @unique @map("chave_idempotencia") @db.Uuid
+  valorCentavos             Int                       @map("valor_centavos")
+  aprovadoEm                DateTime                  @map("aprovado_em")
+  tentativas                Int                       @default(0)
+  bloqueadoProcessamentoAte DateTime?                 @map("bloqueado_processamento_ate")
+  pendenciaId               String?                   @map("pendencia_id") @db.Uuid
+  criadoEm                  DateTime                  @default(now()) @map("criado_em")
+  atualizadoEm              DateTime                  @updatedAt @map("atualizado_em")
+
+  cobranca         Cobranca          @relation(fields: [cobrancaId], references: [id], onDelete: Cascade)
+  orderMercadoPago OrderMercadoPago  @relation(fields: [orderMercadoPagoId], references: [id], onDelete: Cascade)
+  pendencia        PendenciaEstorno? @relation(fields: [pendenciaId], references: [id], onDelete: SetNull)
+
+  @@index([situacao, bloqueadoProcessamentoAte])
+  @@index([pendenciaId])
+  @@map("estornos_automaticos")
+}
+
+model MensagemProcessada {
+  eventId      String   @id @map("event_id") @db.Uuid
+  hashConteudo String   @map("hash_conteudo")
+  processadoEm DateTime @default(now()) @map("processado_em")
+
+  @@map("mensagens_processadas")
+}
+
+model PendenciaFinanceiraMonitoramento {
+  id              String                              @id @default(uuid()) @db.Uuid
+  tipo            TipoPendenciaFinanceiraMonitoramento
+  operacaoId      String?                             @map("operacao_id") @db.Uuid
+  cobrancaId      String?                             @map("cobranca_id") @db.Uuid
+  ordemServicoId  String                              @map("ordem_servico_id") @db.Uuid
+  rodada          Int
+  correlationId   String                              @map("correlation_id") @db.Uuid
+  motivo          String?
+  resolvidoEm     DateTime?                           @map("resolvido_em")
+  criadoEm        DateTime                            @default(now()) @map("criado_em")
+
+  @@index([tipo, resolvidoEm])
+  @@map("pendencias_financeira_monitoramento")
+}

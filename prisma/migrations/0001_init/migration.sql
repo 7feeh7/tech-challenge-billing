@@ -1,0 +1,1 @@
+-- Esqueleto E02: migration vazia; o readiness usa SELECT 1 sem depender de tabelas.

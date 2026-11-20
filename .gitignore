@@ -1,0 +1,13 @@
+/dist
+/node_modules
+/coverage
+.scannerwork/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea
+.vscode
+src/shared/generated/prisma
+.terraform/

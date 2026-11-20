@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+prova-tecnica
+**/*.md
+!README.md
+.terraform
+*.log

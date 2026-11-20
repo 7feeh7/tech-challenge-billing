@@ -1,0 +1,49 @@
+name: Database Migration
+
+# Só manutenção manual (D9.1): na implantação normal a migration roda dentro do
+# deploy.yml, entre o build e o rollout, com a mesma imagem. Este workflow aplica as
+# migrations de uma imagem já publicada no ECR (input image_tag), na main e com
+# aprovação em producao.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Tag da imagem no ECR (padrão = SHA do commit atual)
+        required: false
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  K8S_NAMESPACE: billing
+  TF_ENVIRONMENT: producao
+
+# Mesmo grupo do deploy.yml: o Job manual espera o rollout terminar em vez de somar as
+# conexões dele às dos pods em surge (D5.5, CONNECTION LIMIT 22). O GitHub mantém uma
+# run pendente por grupo: disparar este workflow com um deploy pendente na fila
+# cancela essa run pendente do deploy.
+concurrency:
+  group: billing-producao-pipeline
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Prisma Migrate (Job)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: producao
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Lê só o necessário à migration: ARN do segredo do banco, ECR e nome do cluster.
+      # Sem as credenciais da aplicação, ConfigMap nem ARN da IRSA (o Job não usa IRSA).
+      - uses: ./.github/actions/migration-billing
+        with:
+          image-tag: ${{ inputs.image_tag || github.sha }}

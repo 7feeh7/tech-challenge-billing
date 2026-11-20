@@ -1,0 +1,410 @@
+{
+  "inicio": "2026-11-15T20:51:50.527Z",
+  "cenarios": [
+    {
+      "id": "C01",
+      "titulo": "Criar order (Checkout Pro / Orders API)",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D3.15",
+        "D3.10",
+        "billing.md — criar cobrança"
+      ],
+      "requisicao": {
+        "metodo": "POST",
+        "caminho": "/v1/orders",
+        "external_reference": "cobranca-prova-049c39c1-bf30-4f93-a735-6683d1be4e31",
+        "expiration_time": "PT15M",
+        "idempotency_key": "[uuid]"
+      },
+      "resposta": {
+        "status_http": 201,
+        "duracao_ms": 763,
+        "corpo": {
+          "id": "ORDTST01M7GFR2A0N4CJ7FWWZZ2W21XM",
+          "type": "online",
+          "processing_mode": "manual",
+          "external_reference": "cobranca-prova-049c39c1-bf30-4f93-a735-6683d1be4e31",
+          "total_amount": "150.00",
+          "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFR2A0N4CJ7FWWZZ2W21XM&pref_id=3844602487-ffd3675d-5c61-49b7-8d96-4494697a55ce",
+          "expiration_time": "PT15M",
+          "country_code": "BRA",
+          "user_id": "3844602487",
+          "status": "created",
+          "capture_mode": "automatic_async",
+          "client_token": "[redacted]",
+          "currency": "BRL",
+          "created_date": "2026-11-15T20:52:56.271Z",
+          "last_updated_date": "2026-11-15T20:52:56.271Z",
+          "integration_data": {
+            "application_id": "6090007074819587"
+          },
+          "items": [
+            {
+              "title": "Prova técnica E04 — cobrança oficina",
+              "unit_price": "150.00",
+              "quantity": 1
+            }
+          ]
+        }
+      },
+      "comportamento": "Order criada com id, checkout_url e external_reference ecoado."
+    },
+    {
+      "id": "C02",
+      "titulo": "Idempotência na criação (mesma X-Idempotency-Key)",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D3.15",
+        "D3.11"
+      ],
+      "requisicao": {
+        "metodo": "POST",
+        "caminho": "/v1/orders",
+        "tentativas": 2,
+        "mesma_idempotency_key": true
+      },
+      "resposta": {
+        "primeira": {
+          "status_http": 201,
+          "order_id": "ORDTST01M7GFR2T4VJSW65W5N2TCNQPR"
+        },
+        "segunda": {
+          "status_http": 201,
+          "order_id": "ORDTST01M7GFR2T4VJSW65W5N2TCNQPR"
+        }
+      },
+      "comportamento": "Segunda chamada retornou o mesmo order id."
+    },
+    {
+      "id": "C03",
+      "titulo": "Consultar order (situação e identificação da cobrança)",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D3.10",
+        "D4.5",
+        "billing.md — confirmar por consulta"
+      ],
+      "requisicao": {
+        "metodo": "GET",
+        "caminho": "/v1/orders/ORDTST01M7GFR2A0N4CJ7FWWZZ2W21XM"
+      },
+      "resposta": {
+        "status_http": 200,
+        "duracao_ms": 149,
+        "corpo": {
+          "id": "ORDTST01M7GFR2A0N4CJ7FWWZZ2W21XM",
+          "type": "online",
+          "processing_mode": "manual",
+          "external_reference": "cobranca-prova-049c39c1-bf30-4f93-a735-6683d1be4e31",
+          "total_amount": "150.00",
+          "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFR2A0N4CJ7FWWZZ2W21XM&pref_id=3844602487-ffd3675d-5c61-49b7-8d96-4494697a55ce",
+          "expiration_time": "PT15M",
+          "country_code": "BRA",
+          "user_id": "3844602487",
+          "status": "created",
+          "capture_mode": "automatic_async",
+          "client_token": "[redacted]",
+          "currency": "BRL",
+          "created_date": "2026-11-15T20:52:56.271Z",
+          "last_updated_date": "2026-11-15T20:52:56.271Z",
+          "integration_data": {
+            "application_id": "6090007074819587"
+          },
+          "items": [
+            {
+              "title": "Prova técnica E04 — cobrança oficina",
+              "unit_price": "150.00",
+              "quantity": 1
+            }
+          ]
+        }
+      },
+      "comportamento": "Consulta retorna status, external_reference e transações quando existirem.",
+      "observacoes": "Horário efetivo de aprovação: campo a localizar em transactions.payments após pagamento (cenários C06/C07)."
+    },
+    {
+      "id": "C04",
+      "titulo": "Cancelar order sem pagamento",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D4.5",
+        "D1.15",
+        "billing.md — POST cancel"
+      ],
+      "requisicao": {
+        "metodo": "POST",
+        "caminho": "/v1/orders/ORDTST01M7GFR3JPKJB8TRTDY2J6FQR8/cancel"
+      },
+      "resposta": {
+        "cancelamento": {
+          "status_http": 200,
+          "corpo": {
+            "id": "ORDTST01M7GFR3JPKJB8TRTDY2J6FQR8",
+            "type": "online",
+            "processing_mode": "manual",
+            "external_reference": "cobranca-cancel-1fcff708-2aab-488f-9c00-caee184bf011",
+            "total_amount": "102.00",
+            "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFR3JPKJB8TRTDY2J6FQR8&pref_id=3844602487-f69d074c-7dcb-4322-b4d4-1a06cb143f76",
+            "expiration_time": "PT15M",
+            "country_code": "BRA",
+            "user_id": "3844602487",
+            "status": "canceled",
+            "status_detail": "canceled",
+            "capture_mode": "automatic_async",
+            "currency": "BRL",
+            "created_date": "2026-11-15T20:52:57.572Z",
+            "last_updated_date": "2026-11-15T20:52:58.018Z",
+            "integration_data": {
+              "application_id": "6090007074819587"
+            },
+            "items": [
+              {
+                "title": "Prova técnica E04 — cobrança oficina",
+                "unit_price": "102.00",
+                "quantity": 1
+              }
+            ]
+          }
+        },
+        "consulta": {
+          "status_http": 200,
+          "status_order": "canceled"
+        }
+      },
+      "comportamento": "Cancelamento de order não paga e consulta subsequente com status canceled."
+    },
+    {
+      "id": "C05b",
+      "titulo": "Limites de expiration_time (incl. PT3M — D4.6 demonstração)",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D4.6",
+        "D3.11"
+      ],
+      "requisicao": {
+        "metodo": "POST",
+        "caminho": "/v1/orders",
+        "valores_testados": [
+          "PT3M",
+          "PT5M",
+          "P1D"
+        ]
+      },
+      "resposta": {
+        "tentativas": [
+          {
+            "expiration_time": "PT3M",
+            "status_http": 201,
+            "order_id": "ORDTST01M7GFR4DE271NRJJ8HDJCBWDD"
+          },
+          {
+            "expiration_time": "PT5M",
+            "status_http": 201,
+            "order_id": "ORDTST01M7GFR4V70XMMGVXFRJNTCB4D"
+          },
+          {
+            "expiration_time": "P1D",
+            "status_http": 201,
+            "order_id": "ORDTST01M7GFR58E5N536QJD005YJ7ZQ"
+          }
+        ]
+      },
+      "comportamento": "API aceita valores ISO 8601 usados no projeto; PT3M comprovado ou rejeição documentada."
+    },
+    {
+      "id": "C05",
+      "titulo": "Expiração (expiration_time PT45S)",
+      "resultado": "limitado",
+      "decisoes": [
+        "D4.6",
+        "D3.11",
+        "billing.md — expirada = canceled"
+      ],
+      "requisicao": {
+        "metodo": "POST",
+        "caminho": "/v1/orders",
+        "expiration_time": "PT45S"
+      },
+      "resposta": {
+        "consulta_apos_50s": {
+          "status_http": 200,
+          "status_order": "created",
+          "corpo": {
+            "id": "ORDTST01M7GFR5N45E6CG8FDJ1F4YYPW",
+            "type": "online",
+            "processing_mode": "manual",
+            "external_reference": "cobranca-exp-aadda37c-740a-42d6-823f-007eef9459b1",
+            "total_amount": "103.00",
+            "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFR5N45E6CG8FDJ1F4YYPW&pref_id=3844602487-efd1026d-76e3-417e-9688-7395a9874b4e",
+            "expiration_time": "PT45S",
+            "country_code": "BRA",
+            "user_id": "3844602487",
+            "status": "created",
+            "capture_mode": "automatic_async",
+            "client_token": "[redacted]",
+            "currency": "BRL",
+            "created_date": "2026-11-15T20:52:59.697Z",
+            "last_updated_date": "2026-11-15T20:52:59.697Z",
+            "integration_data": {
+              "application_id": "6090007074819587"
+            },
+            "items": [
+              {
+                "title": "Prova técnica E04 — cobrança oficina",
+                "unit_price": "103.00",
+                "quantity": 1
+              }
+            ]
+          }
+        }
+      },
+      "comportamento": "Status após espera: created.",
+      "observacoes": "Demonstração D4.6: prazo pagamento 3 min → validar PT3M em E17; aqui usamos PT45S por tempo de execução."
+    },
+    {
+      "id": "C11",
+      "titulo": "Timeout simulado (AbortSignal)",
+      "resultado": "comprovado",
+      "decisoes": [
+        "D3.10",
+        "D3.11"
+      ],
+      "requisicao": {
+        "metodo": "GET",
+        "caminho": "/v1/orders/{id}",
+        "timeout_ms": 1
+      },
+      "resposta": {
+        "erro": "TimeoutError",
+        "duracaoMs": 1
+      },
+      "comportamento": "Cliente interrompe a requisição antes da resposta; erro classificável como técnico (D3.10)."
+    },
+    {
+      "id": "C06",
+      "titulo": "Pagamento aprovado (cartão de teste APRO)",
+      "resultado": "pendente",
+      "decisoes": [
+        "D3.2",
+        "D3.11",
+        "D4.5"
+      ],
+      "requisicao": {
+        "metodo": "Checkout Pro",
+        "caminho": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFSQDE13WR26JA47Q5NB2N&pref_id=3844602487-58c86bfd-105f-42a5-95bf-ab027661979f"
+      },
+      "resposta": {
+        "order_criada": {
+          "id": "ORDTST01M7GFSQDE13WR26JA47Q5NB2N",
+          "type": "online",
+          "processing_mode": "manual",
+          "external_reference": "cobranca-aprov-c3914669-4b01-4e36-a601-d5181d71541b",
+          "total_amount": "200.00",
+          "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFSQDE13WR26JA47Q5NB2N&pref_id=3844602487-58c86bfd-105f-42a5-95bf-ab027661979f",
+          "expiration_time": "PT30M",
+          "country_code": "BRA",
+          "user_id": "3844602487",
+          "status": "created",
+          "capture_mode": "automatic_async",
+          "client_token": "[redacted]",
+          "currency": "BRL",
+          "created_date": "2026-11-15T20:53:50.653Z",
+          "last_updated_date": "2026-11-15T20:53:50.653Z",
+          "integration_data": {
+            "application_id": "6090007074819587"
+          },
+          "items": [
+            {
+              "title": "Prova técnica E04 — cobrança oficina",
+              "unit_price": "200.00",
+              "quantity": 1
+            }
+          ]
+        },
+        "instrucao": "Abra checkout_url, pague com cartão teste e titular APRO; exporte MP_ORDER_PAGA_ID e rode de novo."
+      },
+      "comportamento": "Aguarda conclusão manual no checkout (documentação MP).",
+      "hipoteseDocumentacao": true
+    },
+    {
+      "id": "C07",
+      "titulo": "Pagamento recusado (cartão de teste FUND)",
+      "resultado": "pendente",
+      "decisoes": [
+        "D1.15",
+        "D3.11",
+        "billing.md — recusa"
+      ],
+      "requisicao": {
+        "metodo": "Checkout Pro",
+        "caminho": "titular FUND"
+      },
+      "resposta": {
+        "status_order": "created",
+        "corpo": {
+          "id": "ORDTST01M7GFSR0ZKWRK4CDSR7Q2WGG9",
+          "type": "online",
+          "processing_mode": "manual",
+          "external_reference": "cobranca-recus-52f5ee06-a50b-456d-88f2-f68440431c37",
+          "total_amount": "201.00",
+          "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GFSR0ZKWRK4CDSR7Q2WGG9&pref_id=3844602487-39bf2557-a007-423e-8c7c-817edaf8b2ad",
+          "expiration_time": "PT30M",
+          "country_code": "BRA",
+          "user_id": "3844602487",
+          "status": "created",
+          "capture_mode": "automatic_async",
+          "client_token": "[redacted]",
+          "currency": "BRL",
+          "created_date": "2026-11-15T20:53:51.277Z",
+          "last_updated_date": "2026-11-15T20:53:51.277Z",
+          "integration_data": {
+            "application_id": "6090007074819587"
+          },
+          "items": [
+            {
+              "title": "Prova técnica E04 — cobrança oficina",
+              "unit_price": "201.00",
+              "quantity": 1
+            }
+          ]
+        }
+      },
+      "comportamento": "Requer pagamento no checkout com titular FUND; opcional MP_ORDER_RECUSADA_ID.",
+      "hipoteseDocumentacao": true
+    },
+    {
+      "id": "C08",
+      "titulo": "Tentar cancelar order já paga",
+      "resultado": "pendente",
+      "decisoes": [
+        "D4.5",
+        "billing.md — só created/action_required"
+      ],
+      "comportamento": "Depende de order paga (C06). Documentação: cancel só em created/action_required.",
+      "hipoteseDocumentacao": true
+    },
+    {
+      "id": "C09",
+      "titulo": "Estorno total",
+      "resultado": "pendente",
+      "decisoes": [
+        "D1.20",
+        "D3.11"
+      ],
+      "comportamento": "Requer order paga (variável MP_ORDER_PAGA_ID).",
+      "hipoteseDocumentacao": true
+    },
+    {
+      "id": "C10",
+      "titulo": "Estorno parcial",
+      "resultado": "pendente",
+      "decisoes": [
+        "D1.20",
+        "D2.17"
+      ],
+      "comportamento": "Requer segunda order paga (MP_ORDER_PARCIAL_ID) sem estorno total prévio.",
+      "hipoteseDocumentacao": true
+    }
+  ]
+}

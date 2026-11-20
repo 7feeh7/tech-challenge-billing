@@ -1,0 +1,13 @@
+{
+  "evidencias": [
+    {
+      "id": "W06",
+      "resultado": "pendente",
+      "observacoes": "Aguardando pagamentos manuais FUND → APRO.",
+      "dados": {
+        "order_id": "ORDTST01M7GMMTFB6C17A37RM207XAST",
+        "checkout_url": "https://www.mercadopago.com.br/checkout/v1/redirect?order_id=ORDTST01M7GMMTFB6C17A37RM207XAST&pref_id=3844602487-006df59d-54e6-46f5-b360-9d3ec2bbff1d"
+      }
+    }
+  ]
+}

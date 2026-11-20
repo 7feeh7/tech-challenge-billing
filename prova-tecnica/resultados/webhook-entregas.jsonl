@@ -1,0 +1,4 @@
+{"recebidaEm":"2026-11-15T22:15:12.948Z","orderId":"ORDTST01M7GH2KEG5AH9PXBNF8S3AQ8A","requestId":"c5476924-1e64-4bbb-8a3b-32600b3005c9","tipo":"order","acao":"order.processed","duplicado":false,"origem":"mercado_pago"}
+{"recebidaEm":"2026-11-15T22:21:25.504Z","orderId":"ORDTST01M7GMMTFB6C17A37RM207XAST","requestId":"34a92277-7a50-4f62-950b-45f331eba1db","tipo":"order","acao":"order.processed","duplicado":false,"origem":"mercado_pago"}
+{"recebidaEm":"2026-11-15T22:40:13.155Z","orderId":"ORDTST01E2ETEST00000000002","requestId":"f6612fce-91e8-4352-a14f-7950f20b96ce","tipo":"order","acao":"order.updated","duplicado":false,"origem":"mercado_pago"}
+{"recebidaEm":"2026-11-15T22:53:41.375Z","orderId":"ORDTST01E2ETEST00000000002","requestId":"7a8c2232-a8cc-406a-9ef9-f87710eb3456","tipo":"order","acao":"order.updated","duplicado":false,"origem":"mercado_pago"}

@@ -1,0 +1,39 @@
+{
+  "order_paga_id": "ORDTST01M7GH2KEG5AH9PXBNF8S3AQ8A",
+  "order_recusada_id": "ORDTST01M7GH6V2XSBWK20R200BZBDXZ",
+  "C06": {
+    "status": "processed",
+    "status_detail": "accredited",
+    "payment_id": "PAY01M7GH58NFY2C2VE9B9J6M72NM"
+  },
+  "C07": {
+    "order_status": "action_required",
+    "order_status_detail": "waiting_retry",
+    "payment_status": "failed",
+    "payment_status_detail": "insufficient_amount",
+    "payment_id": "PAY01M7GHG1DPM4Q80HQ7ZJRSKR1F",
+    "resultado": "comprovado"
+  },
+  "C08": {
+    "http": 409,
+    "code": "cannot_cancel_order"
+  },
+  "C10": {
+    "http": 201,
+    "refund_amount": "50.00",
+    "order_status_detail": "partially_refunded"
+  },
+  "C09": {
+    "primeira_tentativa_total": {
+      "http": 409,
+      "message": "Conflict"
+    },
+    "segunda_tentativa_total": {
+      "http": 201,
+      "order_status": "refunded",
+      "refunded_amount": "200.00"
+    },
+    "documentacao": "parcialmente_documentado — refund_in_progress / movement_operations_pending"
+  },
+  "payer_email_solucao": "comprador@example.com"
+}
