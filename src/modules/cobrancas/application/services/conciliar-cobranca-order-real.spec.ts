@@ -8,7 +8,7 @@ import { ConciliarCobrancaService } from './conciliar-cobranca.service';
 import { RegistrarSegundoPagamentoService } from './registrar-segundo-pagamento.service';
 import { TratarPagamentoTardioService } from './tratar-pagamento-tardio.service';
 
-// GET real da Orders API (prova-tecnica/resultados/e05-w06-w08-*.json), sem
+// GET real da Orders API (sandbox, E05), sem
 // campos sensíveis: o pagamento aprovado vem processed/accredited, sem
 // date_approved, e a order só traz created_date e last_updated_date.
 const ORDER_PROCESSED_REAL = {

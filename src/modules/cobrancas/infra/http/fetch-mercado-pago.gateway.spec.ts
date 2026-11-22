@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { FetchMercadoPagoGateway } from './fetch-mercado-pago.gateway';
 
-// GET real da Orders API (prova-tecnica/resultados/e05-w06-w08-*.json), sem
+// GET real da Orders API (sandbox, E05), sem
 // campos sensíveis: o pagamento aprovado vem processed/accredited, sem date_approved.
 const ORDER_PROCESSED_REAL = {
   id: 'ORDTST01M7GMMTFB6C17A37RM207XAST',
