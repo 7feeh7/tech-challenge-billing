@@ -217,6 +217,8 @@ export class FetchMercadoPagoGateway implements MercadoPagoGateway {
           ? corpo.status_detail
           : undefined,
       refundedAmount,
+      createdDate:
+        typeof corpo.created_date === 'string' ? corpo.created_date : undefined,
       pagamentos,
     };
   }
