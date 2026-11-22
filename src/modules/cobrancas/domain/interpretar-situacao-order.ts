@@ -22,7 +22,7 @@ export interface OrderMercadoPagoConsultada {
 }
 
 // A Orders API devolve o pagamento aprovado como processed/accredited
-// (comprovado em prova-tecnica/resultados/e05-w06-w08-*.json).
+// (comprovado no GET real do sandbox na E05).
 function ehPagamentoAprovado(pagamento: PagamentoNaOrder): boolean {
   if (pagamento.status === 'approved' || pagamento.status === 'accredited') {
     return true;
