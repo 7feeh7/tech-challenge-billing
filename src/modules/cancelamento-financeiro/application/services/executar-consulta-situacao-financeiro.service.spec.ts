@@ -646,6 +646,89 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
     expect(envelope?.payload?.situacaoPagamento).toBe('INDETERMINADA');
   });
 
+  describe('leitura com order processed no formato real da Orders API', () => {
+    // GET real (prova-tecnica/resultados/e05-w06-w08-*.json): o pagamento
+    // aprovado vem processed/accredited, sem date_approved.
+    const orderProcessedReal = {
+      id: 'ORD1',
+      status: 'processed',
+      statusDetail: 'accredited',
+      createdDate: '2026-11-15T22:18:32.827Z',
+      pagamentos: [
+        {
+          id: 'PAY01M7GN4JNQ27FGP9YTXRP9TCG6',
+          status: 'failed',
+          statusDetail: 'insufficient_amount',
+        },
+        {
+          id: 'PAY01M7GN7HTVMPN47J1BW52QB7B7',
+          status: 'processed',
+          statusDetail: 'accredited',
+        },
+      ],
+    };
+
+    const responderLeitura = async (prazoPagamento: Date) => {
+      const cobranca = new Cobranca({
+        id: 'c1',
+        orcamentoId: 'o1',
+        ordemServicoId: 'os1',
+        rodada: 1,
+        clienteId: 'cl1',
+        correlationId: 'corr',
+        valorTotalCentavos: 21200,
+        prazoPagamento,
+        situacao: SituacaoCobranca.PENDENTE,
+      });
+      const outbox = { registrar: jest.fn() };
+      const servico = new ExecutarConsultaSituacaoFinanceiroService(
+        new UnitOfWorkFake(),
+        {
+          buscarPorId: jest.fn().mockResolvedValue(operacaoConsulta),
+          concluirConsulta: jest.fn(),
+        } as never,
+        {
+          buscarPorOrdemServicoERodada: jest.fn().mockResolvedValue(cobranca),
+        } as never,
+        {
+          buscarAtivaPorCobrancaId: jest.fn().mockResolvedValue({
+            mercadoPagoOrderId: 'ORD1',
+          }),
+        } as never,
+        {
+          consultarOrder: jest
+            .fn()
+            .mockResolvedValue({ tipo: 'sucesso', order: orderProcessedReal }),
+          cancelarOrder: jest.fn(),
+        } as never,
+        outbox as never,
+        { registrar: jest.fn(), resolverPorOperacao: jest.fn() } as never,
+        5,
+        1000,
+      );
+
+      await servico.executar('op1');
+      return (outbox.registrar as jest.Mock).mock.calls[0]?.[1]?.envelope
+        ?.payload?.situacaoPagamento;
+    };
+
+    it('order paga dentro do prazo responde PAGO_NO_PRAZO sem date_approved', async () => {
+      const situacaoPagamento = await responderLeitura(
+        new Date('2026-11-15T22:48:32.827Z'),
+      );
+
+      expect(situacaoPagamento).toBe('PAGO_NO_PRAZO');
+    });
+
+    it('order criada depois do prazo responde SEM_PAGAMENTO', async () => {
+      const situacaoPagamento = await responderLeitura(
+        new Date('2026-11-15T22:00:00.000Z'),
+      );
+
+      expect(situacaoPagamento).toBe('SEM_PAGAMENTO');
+    });
+  });
+
   describe('cobrança paga com segundo pagamento', () => {
     const paga = new Cobranca({
       id: 'c1',
