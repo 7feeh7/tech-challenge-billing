@@ -124,4 +124,95 @@ describe('interpretarSituacaoFinanceira', () => {
       'encerrada_sem_pagamento',
     );
   });
+
+  describe('order processed da Orders API (formato real, sem date_approved)', () => {
+    const orderReal = (
+      pagamentos: OrderMercadoPagoConsultada['pagamentos'],
+    ): OrderMercadoPagoConsultada => ({
+      id: 'ORDTST01M7GMMTFB6C17A37RM207XAST',
+      status: 'processed',
+      statusDetail: 'accredited',
+      createdDate: '2026-11-15T22:18:32.827Z',
+      pagamentos,
+    });
+    const pagamentoRecusadoReal = {
+      id: 'PAY01M7GN4JNQ27FGP9YTXRP9TCG6',
+      status: 'failed',
+      statusDetail: 'insufficient_amount',
+    };
+    const pagamentoProcessadoReal = {
+      id: 'PAY01M7GN7HTVMPN47J1BW52QB7B7',
+      status: 'processed',
+      statusDetail: 'accredited',
+    };
+
+    it('confirma pagamento processed/accredited e ignora a tentativa recusada anterior', () => {
+      const resultado = interpretarSituacaoFinanceira(
+        orderReal([pagamentoRecusadoReal, pagamentoProcessadoReal]),
+      );
+      expect(resultado).toEqual({
+        tipo: 'paga',
+        aprovadoEm: new Date('2026-11-15T22:18:32.827Z'),
+        paymentId: 'PAY01M7GN7HTVMPN47J1BW52QB7B7',
+      });
+    });
+
+    it('prefere date_approved do pagamento quando existir', () => {
+      const resultado = interpretarSituacaoFinanceira(
+        orderReal([
+          {
+            ...pagamentoProcessadoReal,
+            dateApproved: '2026-11-15T22:20:00.000Z',
+          },
+        ]),
+      );
+      expect(resultado).toMatchObject({
+        tipo: 'paga',
+        aprovadoEm: new Date('2026-11-15T22:20:00.000Z'),
+      });
+    });
+
+    it('recorre ao relógio quando não há nenhuma data na order', () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-16T10:00:00.000Z'));
+      try {
+        const resultado = interpretarSituacaoFinanceira({
+          ...orderReal([pagamentoProcessadoReal]),
+          createdDate: undefined,
+        });
+        expect(resultado).toMatchObject({
+          tipo: 'paga',
+          aprovadoEm: new Date('2026-11-16T10:00:00.000Z'),
+        });
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('não confirma pagamento processed com status_detail diferente de accredited', () => {
+      const resultado = interpretarSituacaoFinanceira(
+        orderReal([
+          { id: 'PAY1', status: 'processed', statusDetail: 'in_process' },
+        ]),
+      );
+      expect(resultado.tipo).not.toBe('paga');
+    });
+
+    it('não confirma pagamento processed sem status_detail', () => {
+      const resultado = interpretarSituacaoFinanceira(
+        orderReal([{ id: 'PAY1', status: 'processed' }]),
+      );
+      expect(resultado.tipo).not.toBe('paga');
+    });
+
+    it('mantém recusa quando order processed só tem pagamento failed', () => {
+      const resultado = interpretarSituacaoFinanceira(
+        orderReal([pagamentoRecusadoReal]),
+      );
+      expect(resultado).toEqual({
+        tipo: 'recusada',
+        paymentId: 'PAY01M7GN4JNQ27FGP9YTXRP9TCG6',
+        motivo: 'insufficient_amount',
+      });
+    });
+  });
 });

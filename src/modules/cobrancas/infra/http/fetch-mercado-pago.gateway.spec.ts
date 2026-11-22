@@ -1,6 +1,41 @@
 import { Logger } from '@nestjs/common';
 import { FetchMercadoPagoGateway } from './fetch-mercado-pago.gateway';
 
+// GET real da Orders API (prova-tecnica/resultados/e05-w06-w08-*.json), sem
+// campos sensíveis: o pagamento aprovado vem processed/accredited, sem date_approved.
+const ORDER_PROCESSED_REAL = {
+  id: 'ORDTST01M7GMMTFB6C17A37RM207XAST',
+  type: 'online',
+  processing_mode: 'manual',
+  total_amount: '212.00',
+  total_paid_amount: '212.00',
+  expiration_time: 'PT30M',
+  status: 'processed',
+  status_detail: 'accredited',
+  currency: 'BRL',
+  created_date: '2026-11-15T22:18:32.827Z',
+  last_updated_date: '2026-11-15T22:28:46.556Z',
+  transactions: {
+    payments: [
+      {
+        id: 'PAY01M7GN4JNQ27FGP9YTXRP9TCG6',
+        amount: '212',
+        status: 'failed',
+        status_detail: 'insufficient_amount',
+        attempt_number: 1,
+      },
+      {
+        id: 'PAY01M7GN7HTVMPN47J1BW52QB7B7',
+        amount: '212',
+        paid_amount: '212',
+        status: 'processed',
+        status_detail: 'accredited',
+        attempt_number: 2,
+      },
+    ],
+  },
+};
+
 describe('FetchMercadoPagoGateway', () => {
   const config = {
     get: (chave: string) => {
@@ -54,6 +89,54 @@ describe('FetchMercadoPagoGateway', () => {
     expect(resultado.tipo).toBe('sucesso');
     if (resultado.tipo === 'sucesso') {
       expect(resultado.order.pagamentos[0]?.id).toBe('PAY1');
+    }
+  });
+
+  it('mapeia order processed real sem date_approved usando created_date da order', async () => {
+    const gateway = new FetchMercadoPagoGateway(config as never);
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(ORDER_PROCESSED_REAL),
+    } as Response);
+
+    const resultado = await gateway.consultarOrder(
+      'ORDTST01M7GMMTFB6C17A37RM207XAST',
+    );
+
+    expect(resultado.tipo).toBe('sucesso');
+    if (resultado.tipo !== 'sucesso') return;
+    expect(resultado.order.status).toBe('processed');
+    expect(resultado.order.createdDate).toBe('2026-11-15T22:18:32.827Z');
+    expect(resultado.order.pagamentos).toEqual([
+      {
+        id: 'PAY01M7GN4JNQ27FGP9YTXRP9TCG6',
+        status: 'failed',
+        statusDetail: 'insufficient_amount',
+        dateApproved: undefined,
+      },
+      {
+        id: 'PAY01M7GN7HTVMPN47J1BW52QB7B7',
+        status: 'processed',
+        statusDetail: 'accredited',
+        dateApproved: undefined,
+      },
+    ]);
+  });
+
+  it('mapeia order sem created_date com createdDate indefinido', async () => {
+    const gateway = new FetchMercadoPagoGateway(config as never);
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ id: 'ORD1', status: 'created' }),
+    } as Response);
+
+    const resultado = await gateway.consultarOrder('ORD1');
+
+    expect(resultado.tipo).toBe('sucesso');
+    if (resultado.tipo === 'sucesso') {
+      expect(resultado.order.createdDate).toBeUndefined();
     }
   });
 

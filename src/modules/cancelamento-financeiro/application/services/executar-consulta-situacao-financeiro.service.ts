@@ -111,16 +111,7 @@ export class ExecutarConsultaSituacaoFinanceiroService {
       return;
     }
 
-    const { pagamento, estorno } = this.avaliarOrder(
-      cobranca,
-      consulta.order,
-      consulta.order.pagamentos.find((p) => p.dateApproved)?.dateApproved
-        ? new Date(
-            consulta.order.pagamentos.find((p) => p.dateApproved)
-              ?.dateApproved as string,
-          )
-        : null,
-    );
+    const { pagamento, estorno } = this.avaliarOrder(cobranca, consulta.order);
 
     await this.responder(
       operacao,
@@ -346,7 +337,6 @@ export class ExecutarConsultaSituacaoFinanceiroService {
   private avaliarOrder(
     cobranca: Cobranca,
     order: Parameters<typeof interpretarSituacaoFinanceira>[0],
-    aprovadoEm: Date | null,
   ): {
     pagamento: SituacaoPagamentoConsulta;
     estorno: PayloadSituacaoFinanceira['situacaoEstorno'];
@@ -357,8 +347,10 @@ export class ExecutarConsultaSituacaoFinanceiroService {
       situacaoCobranca: cobranca.situacao,
     });
 
-    if (interpretacao.tipo === 'paga' && aprovadoEm) {
-      if (aprovadoEm.getTime() <= cobranca.prazoPagamento.getTime()) {
+    if (interpretacao.tipo === 'paga') {
+      if (
+        interpretacao.aprovadoEm.getTime() <= cobranca.prazoPagamento.getTime()
+      ) {
         return { pagamento: 'PAGO_NO_PRAZO', estorno };
       }
       return { pagamento: 'SEM_PAGAMENTO', estorno };
