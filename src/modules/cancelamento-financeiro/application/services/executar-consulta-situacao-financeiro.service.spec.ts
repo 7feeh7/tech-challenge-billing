@@ -647,7 +647,7 @@ describe('ExecutarConsultaSituacaoFinanceiroService', () => {
   });
 
   describe('leitura com order processed no formato real da Orders API', () => {
-    // GET real (prova-tecnica/resultados/e05-w06-w08-*.json): o pagamento
+    // GET real da Orders API (sandbox, E05): o pagamento
     // aprovado vem processed/accredited, sem date_approved.
     const orderProcessedReal = {
       id: 'ORD1',
